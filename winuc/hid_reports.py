@@ -1,12 +1,12 @@
-"""HID レポートマップとレポートのパッキング。
+"""HID report map and report packing.
 
-構成 (1つの HID サービスに 3 レポート):
-  Report ID 1: キーボード (8バイト: modifiers, reserved, key1..key6) + LED 出力
-  Report ID 2: コンシューマ (2バイト: 16bit usage, 0 で解放)
-  Report ID 3: マウス (7バイト: buttons, dx16, dy16, wheel8, hwheel8)
+Layout (3 reports in a single HID service):
+  Report ID 1: Keyboard (8 bytes: modifiers, reserved, key1..key6) + LED output
+  Report ID 2: Consumer (2 bytes: 16-bit usage, 0 to release)
+  Report ID 3: Mouse (7 bytes: buttons, dx16, dy16, wheel8, hwheel8)
 
-BLE では Report ID は Report Reference ディスクリプタで伝えるため、
-notify のペイロードに ID バイトは含めない。
+Over BLE the Report ID is conveyed by the Report Reference descriptor,
+so the notify payload does not include the ID byte.
 """
 
 from __future__ import annotations
@@ -127,7 +127,7 @@ def _clamp(value: int, lo: int, hi: int) -> int:
 def mouse_report(
     buttons: int, dx: int, dy: int, wheel: int = 0, hwheel: int = 0
 ) -> bytes:
-    """buttons: bit0=左, bit1=右, bit2=中, bit3=X1, bit4=X2"""
+    """buttons: bit0=left, bit1=right, bit2=middle, bit3=X1, bit4=X2"""
     return struct.pack(
         "<Bhhbb",
         buttons & 0x1F,
@@ -139,7 +139,7 @@ def mouse_report(
 
 
 def keyboard_report(modifiers: int, keys: tuple[int, ...] = ()) -> bytes:
-    """modifiers: HID modifier ビットマスク、keys: 押下中の usage 最大6個。"""
+    """modifiers: HID modifier bitmask, keys: up to 6 currently-pressed usages."""
     padded = (tuple(keys) + (0,) * 6)[:6]
     return struct.pack("<BB6B", modifiers & 0xFF, 0, *padded)
 
@@ -148,7 +148,7 @@ KEYBOARD_RELEASE_ALL = keyboard_report(0)
 
 
 def consumer_report(usage: int) -> bytes:
-    """usage: Consumer page の usage ID (0 で全解放)。"""
+    """usage: Consumer page usage ID (0 releases all)."""
     return struct.pack("<H", usage & 0x3FF)
 
 

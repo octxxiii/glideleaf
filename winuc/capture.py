@@ -1,19 +1,19 @@
-"""Windows のグローバル入力キャプチャ。
+"""Global input capture on Windows.
 
-方式 (PowerToys Mouse Without Borders / deskflow と同系だが、
-移動量の取得に Raw Input を使う点が異なる):
+Approach (same family as PowerToys Mouse Without Borders / deskflow, but
+differs in using Raw Input to obtain the motion amount):
 
-- WH_MOUSE_LL / WH_KEYBOARD_LL 低レベルフック:
-    キャプチャ中はイベントを飲み込み (return 1)、ローカルアプリに渡さない。
-    ボタン・ホイール・キーはここから取得する。
+- WH_MOUSE_LL / WH_KEYBOARD_LL low-level hooks:
+    During capture, swallow events (return 1) and do not pass them to local apps.
+    Buttons, wheel and keys are obtained here.
 - Raw Input (WM_INPUT, RIDEV_INPUTSINK):
-    フックが飲み込んでいても加速前の相対移動量 (デバイスカウント) が届く。
-    突き抜け量の計測と iPad へ転送する移動量はこちらを使う。
-    (iPad 側が独自のポインタ加速を掛けるため、非加速の生デルタを送るのが正しい)
-- カーソルのピン留め/隠蔽は ClipCursor(1x1) で行う。
+    The pre-acceleration relative motion (device counts) arrives even when the hook swallows the event.
+    This is used for measuring the break-through amount and the motion forwarded to the iPad.
+    (The iPad applies its own pointer acceleration, so sending the non-accelerated raw delta is correct.)
+- Cursor pinning/hiding is done with ClipCursor(1x1).
 
-フックコールバックは LowLevelHooksTimeout (最大 1000ms) を超えると
-Windows に黙って外されるため、コールバック内の処理は最小限に保つこと。
+If a hook callback exceeds LowLevelHooksTimeout (max 1000ms), Windows silently
+removes it, so keep the work inside the callback to a minimum.
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 user32 = ctypes.windll.user32
 kernel32 = ctypes.windll.kernel32
 
-# --- Win32 定数 ---
+# --- Win32 constants ---
 WH_KEYBOARD_LL = 13
 WH_MOUSE_LL = 14
 
@@ -87,7 +87,7 @@ _MOUSE_BUTTON_MESSAGES = {
 
 BUTTON_NAMES = {"left": 0, "right": 1, "middle": 2, "x1": 3, "x2": 4}
 
-# 自分が SendInput したイベントの目印 (dwExtraInfo)
+# Marker for events we injected via SendInput (dwExtraInfo)
 MAGIC_EXTRA_INFO = 0x57696E55  # "WinU"
 
 _MODIFIER_VKS = {
@@ -98,7 +98,7 @@ _MODIFIER_VKS = {
 }
 
 
-# --- 構造体 ---
+# --- Structures ---
 class MSLLHOOKSTRUCT(ctypes.Structure):
     _fields_ = [
         ("pt", wt.POINT),
@@ -174,8 +174,8 @@ class INPUT(ctypes.Structure):
 HOOKPROC = ctypes.WINFUNCTYPE(LRESULT, ctypes.c_int, wt.WPARAM, wt.LPARAM)
 WNDPROC = ctypes.WINFUNCTYPE(LRESULT, wt.HWND, wt.UINT, wt.WPARAM, wt.LPARAM)
 
-# 64bit 環境でポインタ/ハンドルが 32bit int に切り詰められないよう、
-# 使用する Win32 API すべてに引数型・戻り値型を明示する。
+# To prevent pointers/handles from being truncated to 32-bit int in 64-bit
+# environments, explicitly declare argument and return types for every Win32 API used.
 user32.SetWindowsHookExW.argtypes = [ctypes.c_int, HOOKPROC, wt.HINSTANCE, wt.DWORD]
 user32.SetWindowsHookExW.restype = wt.HHOOK
 user32.UnhookWindowsHookEx.argtypes = [wt.HHOOK]
@@ -217,7 +217,7 @@ kernel32.GetCurrentThreadId.restype = wt.DWORD
 
 
 def enable_dpi_awareness() -> None:
-    """Per-Monitor V2 DPI awareness。混在 DPI 環境でのエッジ座標のずれを防ぐ。"""
+    """Per-Monitor V2 DPI awareness. Prevents edge-coordinate drift in mixed-DPI environments."""
     try:
         DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = ctypes.c_void_p(-4)
         user32.SetProcessDpiAwarenessContext(
@@ -231,7 +231,7 @@ def enable_dpi_awareness() -> None:
 
 
 def parse_hotkey(spec: str) -> tuple[frozenset[str], int]:
-    """"ctrl+alt+q" → (修飾キー集合, キーの VK)。"""
+    """"ctrl+alt+q" → (set of modifier keys, VK of the key)."""
     parts = [p.strip().lower() for p in spec.split("+") if p.strip()]
     mods = frozenset(p for p in parts if p in ("ctrl", "alt", "shift", "win"))
     keys = [p for p in parts if p not in mods]
@@ -240,7 +240,7 @@ def parse_hotkey(spec: str) -> tuple[frozenset[str], int]:
 
 
 class MonitorInfo:
-    """モニタ配置から、設定されたエッジの最外周セグメントを求める。"""
+    """From the monitor layout, find the outermost segment of the configured edge."""
 
     @staticmethod
     def get_monitor_rects() -> list[tuple[int, int, int, int]]:
@@ -260,9 +260,9 @@ class MonitorInfo:
 
     @staticmethod
     def edge_geometry(edge: str) -> tuple[int, int, int]:
-        """(エッジ固定座標, 範囲lo, 範囲hi) を返す。"""
+        """Return (fixed edge coordinate, range lo, range hi)."""
         rects = MonitorInfo.get_monitor_rects()
-        if not rects:  # フォールバック: プライマリのみ
+        if not rects:  # Fallback: primary only
             w = user32.GetSystemMetrics(0)
             h = user32.GetSystemMetrics(1)
             rects = [(0, 0, w, h)]
@@ -284,13 +284,13 @@ class MonitorInfo:
 
 
 class InputCapture(threading.Thread):
-    """フック + Raw Input を動かすスレッド。
+    """Thread that runs the hooks + Raw Input.
 
-    emit(event) はフックスレッドから呼ばれる。イベント:
+    emit(event) is called from the hook thread. Events:
       ("state", "remote" | "local")
-      ("move", dx, dy)                 raw 相対移動 (REMOTE 中のみ)
-      ("button", index, down)          0=左 1=右 2=中 3=X1 4=X2
-      ("wheel", v_delta, h_delta)      ±120 単位
+      ("move", dx, dy)                 raw relative motion (only during REMOTE)
+      ("button", index, down)          0=left 1=right 2=middle 3=X1 4=X2
+      ("wheel", v_delta, h_delta)      units of ±120
       ("key", vk, scan, extended, down)
     """
 
@@ -305,11 +305,11 @@ class InputCapture(threading.Thread):
         super().__init__(name="winuc-capture", daemon=True)
         self.machine = machine
         self.emit = emit
-        self.armed = False  # BLE 接続済みのときだけ True (app が設定)
-        # X-Mouse Button Control 等が SendInput したイベントも転送する
+        self.armed = False  # True only when BLE is connected (set by app)
+        # Also forward events injected via SendInput by X-Mouse Button Control, etc.
         self.forward_injected = forward_injected
-        # REMOTE 中もフックチェーンの下流 (XMBC 等) へ通すボタン。
-        # 通したボタンは XMBC が変換・注入し、注入イベント側を転送する。
+        # Buttons passed to downstream of the hook chain (XMBC, etc.) even during REMOTE.
+        # XMBC converts/injects the passed button, and we forward the injected event.
         self.passthrough_buttons = frozenset(
             BUTTON_NAMES[name] for name in passthrough_buttons if name in BUTTON_NAMES
         )
@@ -321,7 +321,7 @@ class InputCapture(threading.Thread):
         self._down_vks: set[int] = set()
         self._lock = threading.Lock()
         self._started_event = threading.Event()
-        # コールバックを GC から守るため参照を保持
+        # Keep references to protect the callbacks from GC
         self._mouse_proc = HOOKPROC(self._mouse_hook_proc)
         self._keyboard_proc = HOOKPROC(self._keyboard_hook_proc)
         self._wnd_proc = WNDPROC(self._window_proc)
@@ -336,10 +336,10 @@ class InputCapture(threading.Thread):
             WH_KEYBOARD_LL, self._keyboard_proc, None, 0
         )
         if not self._mouse_hook or not self._keyboard_hook:
-            logger.error("フックのインストールに失敗しました (エラー %d)", kernel32.GetLastError())
+            logger.error("Failed to install hooks (error %d)", kernel32.GetLastError())
         self._update_edge_geometry()
         self._started_event.set()
-        logger.info("入力キャプチャ開始 (edge=%s)", self.machine.edge)
+        logger.info("Input capture started (edge=%s)", self.machine.edge)
 
         msg = wt.MSG()
         while user32.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
@@ -361,7 +361,7 @@ class InputCapture(threading.Thread):
             user32.PostThreadMessageW(self._thread_id, WM_QUIT, 0, 0)
 
     def force_release(self) -> None:
-        """任意のスレッドから安全に呼べる: 即座に Windows へ制御を戻す。"""
+        """Safe to call from any thread: immediately return control to Windows."""
         with self._lock:
             if self.machine.state == State.LOCAL:
                 return
@@ -397,8 +397,8 @@ class InputCapture(threading.Thread):
         wc.hInstance = hinstance
         wc.lpszClassName = "WinUCRawInput"
         if not user32.RegisterClassW(ctypes.byref(wc)):
-            logger.error("RegisterClassW 失敗 (%d)", kernel32.GetLastError())
-        # Raw Input は message-only window には届かないため、非表示のトップレベル窓を使う
+            logger.error("RegisterClassW failed (%d)", kernel32.GetLastError())
+        # Raw Input does not reach a message-only window, so use a hidden top-level window
         self._hwnd = user32.CreateWindowExW(
             0, "WinUCRawInput", "WinUC", 0, 0, 0, 0, 0, None, None, hinstance, None
         )
@@ -406,7 +406,7 @@ class InputCapture(threading.Thread):
         if not user32.RegisterRawInputDevices(
             ctypes.byref(rid), 1, ctypes.sizeof(RAWINPUTDEVICE)
         ):
-            logger.error("RegisterRawInputDevices 失敗 (%d)", kernel32.GetLastError())
+            logger.error("RegisterRawInputDevices failed (%d)", kernel32.GetLastError())
 
     def _window_proc(self, hwnd, msg, wparam, lparam) -> int:
         if msg == WM_INPUT:
@@ -419,7 +419,7 @@ class InputCapture(threading.Thread):
     def _update_edge_geometry(self) -> None:
         coord, lo, hi = MonitorInfo.edge_geometry(self.machine.edge)
         self.machine.set_edge_geometry(coord, lo, hi)
-        logger.info("エッジ座標: %s=%d, 範囲 %d..%d", self.machine.edge, coord, lo, hi)
+        logger.info("Edge coordinate: %s=%d, range %d..%d", self.machine.edge, coord, lo, hi)
 
     # ----------------------------------------------------------- raw input
 
@@ -439,7 +439,7 @@ class InputCapture(threading.Thread):
         if got in (0, 0xFFFFFFFF) or raw.header.dwType != RIM_TYPEMOUSE:
             return
         if raw.mouse.usFlags & MOUSE_MOVE_ABSOLUTE:
-            return  # タブレット等の絶対座標デバイスは対象外
+            return  # Absolute-coordinate devices (tablets, etc.) are out of scope
         dx, dy = raw.mouse.lLastX, raw.mouse.lLastY
         if dx == 0 and dy == 0:
             return
@@ -486,11 +486,11 @@ class InputCapture(threading.Thread):
         self._set_cursor_inward(x, y)
 
     def _enter_remote(self) -> None:
-        # 押しっぱなしの修飾キーを Windows 側で解放して stuck を防ぐ
+        # Release still-held modifier keys on the Windows side to prevent stuck keys
         for vk in list(self._down_vks & _MODIFIER_VKS):
             self._inject_key_up(vk)
         self._down_vks.clear()
-        # カーソルをエッジの隅に退避して見えなくする
+        # Move the cursor to the corner of the edge to hide it
         edge = self.machine.edge
         if edge in ("right", "left"):
             hide_x = self.machine._edge_coord
@@ -500,14 +500,14 @@ class InputCapture(threading.Thread):
             hide_y = self.machine._edge_coord
         self._pin_cursor(hide_x, hide_y)
         self.emit(("state", "remote"))
-        logger.info("→ iPad へ移動")
+        logger.info("→ moved to iPad")
 
     def _exit_remote(self, exit_point: tuple[int, int] | None) -> None:
         user32.ClipCursor(None)
         if exit_point is not None:
             self._set_cursor_inward(*exit_point)
         self.emit(("state", "local"))
-        logger.info("← Windows へ復帰")
+        logger.info("← returned to Windows")
 
     @staticmethod
     def _inject_key_up(vk: int) -> None:
@@ -540,18 +540,18 @@ class InputCapture(threading.Thread):
         if state == State.PUSHING:
             if injected:
                 return user32.CallNextHookEx(None, ncode, wparam, lparam)
-            # 押し込み中にクリック等をしたらキャンセルしてローカルに渡す
+            # If a click, etc., happens while pushing, cancel and pass it to local
             if wparam != WM_MOUSEMOVE:
                 self.machine.cancel_push()
                 self._cancel_push()
                 return user32.CallNextHookEx(None, ncode, wparam, lparam)
-            return 1  # 移動は飲み込む (計測は Raw Input 側)
+            return 1  # Swallow movement (measured on the Raw Input side)
 
         # ---- REMOTE ----
-        # 自分の SetCursorPos/SendInput、および転送しない設定の注入イベントは素通し
+        # Pass through our own SetCursorPos/SendInput, and injected events configured not to forward
         if ours or (injected and not self.forward_injected):
             return user32.CallNextHookEx(None, ncode, wparam, lparam)
-        # 移動: 物理入力は Raw Input 側で計測するので飲み込む。注入移動は素通し。
+        # Movement: physical input is measured on the Raw Input side so swallow it. Pass through injected movement.
         if wparam == WM_MOUSEMOVE:
             if injected:
                 return user32.CallNextHookEx(None, ncode, wparam, lparam)
@@ -574,8 +574,8 @@ class InputCapture(threading.Thread):
         else:
             return 1
 
-        # 物理ボタンのうち素通し指定のものはフックチェーンの下流 (XMBC 等) に渡し、
-        # XMBC が注入する変換後イベントを転送する
+        # For physical buttons marked as pass-through, pass them downstream in the hook chain (XMBC, etc.),
+        # and forward the converted event that XMBC injects
         if not injected and index in self.passthrough_buttons:
             return user32.CallNextHookEx(None, ncode, wparam, lparam)
         self.emit(("button", index, down))
@@ -595,20 +595,20 @@ class InputCapture(threading.Thread):
                 or self.machine.state != State.REMOTE
             ):
                 return user32.CallNextHookEx(None, ncode, wparam, lparam)
-            # XMBC/AutoHotkey 等が注入したキーも REMOTE 中は転送対象
+            # Keys injected by XMBC/AutoHotkey, etc., are also forwarded during REMOTE
 
         down = not (info.flags & LLKHF_UP)
         vk = info.vkCode
 
         if self.machine.state != State.REMOTE:
-            # LOCAL/PUSHING: 押下状態だけ追跡してそのまま通す
+            # LOCAL/PUSHING: only track the pressed state and pass it through
             if down:
                 self._down_vks.add(vk)
             else:
                 self._down_vks.discard(vk)
             return user32.CallNextHookEx(None, ncode, wparam, lparam)
 
-        # REMOTE: 解放ホットキーの判定
+        # REMOTE: check for the release hotkey
         if down:
             self._down_vks.add(vk)
         else:

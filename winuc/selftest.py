@@ -1,8 +1,8 @@
-"""実機ドングルなしで BLE 層を検証するセルフテスト。
+"""Self-test that validates the BLE layer without a physical dongle.
 
-bumble の仮想コントローラ 2 つを LocalLink で接続し、
-片方に WinUC の HOGP ペリフェラル、もう片方に iPad 役のセントラルを立てる。
-ペアリング (Just Works) → サービス発見 → レポート購読 → 通知受信まで通す。
+Connects two of bumble's virtual controllers over a LocalLink, running the
+WinUC HOGP peripheral on one and a central acting as the iPad on the other.
+Runs the full flow: pairing (Just Works) -> service discovery -> report subscription -> notification receipt.
 """
 
 from __future__ import annotations
@@ -35,11 +35,11 @@ CENTRAL_ADDRESS = "F0:F1:F2:AA:BB:01"
 
 
 async def run_selftest(config: Config | None = None, keystore_file: str | None = None) -> dict:
-    """成功すると受信レポートの内容を返す。失敗すると例外。"""
+    """On success, returns the contents of the received reports. Raises on failure."""
     config = config or Config()
     link = LocalLink()
 
-    # --- ペリフェラル (WinUC) ---
+    # --- Peripheral (WinUC) ---
     peripheral_controller = Controller("WinUC", link=link)
     peripheral = HogpPeripheral(config, keystore_file)
     device_config = peripheral.make_device_configuration()
@@ -50,7 +50,7 @@ async def run_selftest(config: Config | None = None, keystore_file: str | None =
     peripheral.attach(peripheral_device)
     await peripheral.start()
 
-    # --- セントラル (iPad 役) ---
+    # --- Central (acting as iPad) ---
     central_controller = Controller("iPad", link=link)
     central_device = Device(
         name="FakeiPad",
@@ -65,23 +65,23 @@ async def run_selftest(config: Config | None = None, keystore_file: str | None =
     connection = await central_device.connect(
         Address(config.address, Address.RANDOM_DEVICE_ADDRESS)
     )
-    logger.info("selftest: 接続完了")
+    logger.info("selftest: connection established")
     await connection.pair()
-    logger.info("selftest: ペアリング完了 (encrypted=%s)", connection.is_encrypted)
+    logger.info("selftest: pairing complete (encrypted=%s)", connection.is_encrypted)
 
     peer = Peer(connection)
     await peer.discover_services()
     hid_services = peer.get_services_by_uuid(GATT_HUMAN_INTERFACE_DEVICE_SERVICE)
-    assert hid_services, "HID サービスが見つからない"
+    assert hid_services, "HID service not found"
     await peer.discover_characteristics()
 
     report_map = await peer.read_value(
         peer.get_characteristics_by_uuid(GATT_REPORT_MAP_CHARACTERISTIC)[0]
     )
-    assert bytes(report_map) == hr.REPORT_MAP, "Report Map が一致しない"
-    logger.info("selftest: Report Map 読み出し OK (%d bytes)", len(report_map))
+    assert bytes(report_map) == hr.REPORT_MAP, "Report Map does not match"
+    logger.info("selftest: Report Map read OK (%d bytes)", len(report_map))
 
-    # 入力レポートを Report Reference (ID, type=input) で特定して購読
+    # Identify input reports by their Report Reference (ID, type=input) and subscribe
     received: dict[int, list[bytes]] = {1: [], 2: [], 3: []}
     subscribed = 0
     for characteristic in peer.get_characteristics_by_uuid(GATT_REPORT_CHARACTERISTIC):
@@ -98,13 +98,13 @@ async def run_selftest(config: Config | None = None, keystore_file: str | None =
 
         await peer.subscribe(characteristic, on_notification)
         subscribed += 1
-    assert subscribed == 3, f"入力レポートは3つのはず (got {subscribed})"
+    assert subscribed == 3, f"expected 3 input reports (got {subscribed})"
 
-    # 購読イベントがペリフェラル側に伝わるまで少し待つ
+    # Wait a bit for the subscription events to reach the peripheral side
     await asyncio.sleep(0.1)
-    assert peripheral.ready, "ペリフェラルが ready にならない"
+    assert peripheral.ready, "peripheral did not become ready"
 
-    # --- 入力送信 ---
+    # --- Send input ---
     await peripheral.send_mouse(buttons=1, dx=10, dy=-5, wheel=1)
     await peripheral.send_keyboard(0x08, (0x04,))  # Cmd+A
     await peripheral.send_keyboard(0, ())
@@ -112,11 +112,11 @@ async def run_selftest(config: Config | None = None, keystore_file: str | None =
     await peripheral.send_consumer(0)
     await asyncio.sleep(0.2)
 
-    assert received[3], "マウスレポートが届いていない"
+    assert received[3], "no mouse report received"
     assert received[3][0] == hr.mouse_report(1, 10, -5, 1, 0)
     assert received[1][0] == hr.keyboard_report(0x08, (0x04,))
     assert received[1][1] == hr.keyboard_report(0, ())
     assert received[2][0] == hr.consumer_report(0x00E9)
 
-    logger.info("selftest: すべての通知を確認 ✓")
+    logger.info("selftest: all notifications verified ✓")
     return {k: [v.hex() for v in vs] for k, vs in received.items()}

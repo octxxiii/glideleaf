@@ -1,161 +1,160 @@
-# WinUC — Windows 版 Universal Control
+# WinUC — Universal Control for Windows
 
-Mac の Universal Control のように、**Windows のマウスとキーボードで iPad を操作**する。
-マウスカーソルを画面の端に押し込むと iPad 側にカーソルが現れ、キーボード入力も iPad に切り替わる。
-戻るときは iPad 側の共有エッジへカーソルを押し戻すだけ。**iPad には何もインストールしない。**
+Control your **iPad with the mouse and keyboard of your Windows PC**, the way
+macOS Universal Control lets a Mac drive an iPad. Push the pointer past a screen
+edge and it crosses onto the iPad; the keyboard follows. Push back through the
+shared edge to return. **Nothing is installed on the iPad** — to iPadOS this is
+just an ordinary Bluetooth mouse and keyboard.
 
-## 仕組み
+> **v2** adds a system-tray app with a GUI: setup wizard, one-click WinUSB
+> driver switching, settings, autostart, and an installer. The original
+> command-line mode still works (`python -m winuc`).
 
-iPadOS はネットワーク経由の外部入力注入を許可していないため、唯一の現実的な経路は
-**Windows 自身を Bluetooth LE のマウス+キーボード (HID over GATT / HOGP) として振る舞わせる**こと。
-iPadOS 13.4 以降は BLE マウスを OS 標準のポインタとして扱うので、iPad から見れば
-「普通の Bluetooth マウス&キーボード」がつながっているだけになる。
+## How it works
 
-ただし Windows 標準の Bluetooth スタックは HOGP ペリフェラルになれない
-(GATT サーバーで Device Information Service の公開がブロックされている)。
-そこで [Google bumble](https://github.com/google/bumble)(ユーザー空間 Bluetooth スタック)で
-USB ドングルを WinUSB 経由で直接制御する。
+iPadOS does not allow injecting input over the network, so the only practical
+path is to make **Windows itself act as a Bluetooth LE mouse + keyboard**
+(HID over GATT, "HOGP"). Since iPadOS 13.4 a BLE mouse is a first-class pointer,
+so the iPad sees a normal Bluetooth peripheral.
+
+The in-box Windows Bluetooth stack cannot be a HOGP peripheral (it blocks
+publishing the Device Information Service). WinUC therefore drives a USB
+Bluetooth dongle directly in user space via [Google bumble](https://github.com/google/bumble),
+with the dongle bound to the WinUSB driver.
 
 ```
 ┌─ Windows ────────────────────────────────┐      ┌─ iPad ─────────┐
-│ WH_MOUSE_LL / WH_KEYBOARD_LL  (飲み込み)  │      │                │
-│ Raw Input WM_INPUT            (生デルタ)  │      │  標準の BLE     │
-│        │                                 │ BLE  │  マウス/キーボード│
-│  エッジ状態機械 → HID レポート → bumble ──┼──────▶  として認識     │
-│              (HOGP ペリフェラル)          │      │                │
+│ WH_MOUSE_LL / WH_KEYBOARD_LL  (swallow)   │      │                │
+│ Raw Input WM_INPUT            (raw delta) │ BLE  │  seen as a      │
+│        │                                  ├──────▶  standard mouse │
+│  edge state machine → HID reports → bumble│ HOGP │  + keyboard     │
+│              (HOGP peripheral)            │      │                │
 └──────────────────────────────────────────┘      └────────────────┘
 ```
 
-## 必要なもの
+## Requirements
 
-- Windows 10/11 + Python 3.10 以上
-- **USB Bluetooth ドングル 1 本**(WinUC が占有する)
-  - この PC の Buffalo ドングル (Realtek RTL8761B 系, `VID_0411&PID_0374`) は対応確認済みのチップ
-  - ⚠ WinUSB 化している間、そのドングルは通常の Bluetooth(イヤホン等)に使えない。
-    普段使いと併用するなら **WinUC 専用ドングルの追加購入を推奨**(RTL8761B 系 ~¥1,500)
-- iPad (iPadOS 13.4 以降。キーボードショートカット等をフル活用するなら 15 以降推奨)
+- Windows 10/11, and (for running from source) Python 3.10+
+- **One USB Bluetooth dongle** that WinUC takes over
+  - Realtek RTL8761B-family dongles are the tested reference
+  - ⚠ While bound to WinUSB, that dongle can't be used for normal Bluetooth
+    (earbuds, controllers). Use a **dedicated dongle** if you want both.
+- An iPad on iPadOS 13.4+ (15+ recommended for keyboard shortcuts)
 
-## セットアップ
+## Install (end users)
+
+Download and run **WinUC-Setup.exe** from the
+[Releases](https://github.com/fuba/winuc/releases) page. It installs the app,
+optionally starts it at sign-in, and launches the **setup wizard**:
+
+1. The wizard detects your Bluetooth dongle.
+2. Click **Switch to WinUSB** (one UAC prompt) to hand the dongle to WinUC.
+3. On your iPad, open **Settings › Bluetooth** and connect to
+   "Windows Pointer & Keyboard".
+4. Push the mouse into your chosen screen edge to cross over.
+
+WinUC then lives in the system tray. Right-click the tray icon for
+**Enabled**, **Settings…**, **Setup / Dongle…**, **Start at sign-in**, and
+**Quit**. The tray icon color shows status (grey = stopped, blue = waiting,
+green = actively controlling the iPad, red = error).
+
+To go back to normal Bluetooth on the dongle, open **Setup / Dongle…** and click
+**Restore normal Bluetooth** (the uninstaller does this automatically too).
+
+## Run from source (developers)
 
 ```powershell
-# 1. 依存のインストール
 python -m venv .venv
 .venv\Scripts\pip install -r requirements.txt
 
-# 2. Realtek ファームウェア (Linux カーネルの firmware リポジトリから取得)
+# Realtek firmware (from the Linux kernel firmware repo)
 .venv\Scripts\bumble-rtk-fw-download.exe --output-dir firmware
 
-# 3. ドングルのドライバを WinUSB に切り替え (Zadig の操作のみ手動)
-powershell -ExecutionPolicy Bypass -File scripts\setup_dongle.ps1
+# Optional: fetch wdi-simple.exe for automatic WinUSB switching
+powershell -ExecutionPolicy Bypass -File scripts\fetch_wdi.ps1
 
-#    元に戻すとき (通常の Bluetooth に復帰させる):
-powershell -ExecutionPolicy Bypass -File scripts\restore_dongle.ps1
-
-# 4. 動作確認 (ドングル不要の仮想 BLE セルフテスト)
-.\run.ps1 --selftest
+python -m winuc --tray        # GUI tray app
+python -m winuc --setup       # just the setup wizard
+python -m winuc               # headless console mode (v1 behaviour)
+python -m winuc --selftest    # validate the BLE layer with no dongle
 ```
 
-## 使い方
+If you prefer not to automate the driver switch, `scripts\setup_dongle.ps1`
+launches Zadig, and `scripts\restore_dongle.ps1` restores the in-box driver.
+
+## Building the installer
 
 ```powershell
-Copy-Item config.example.json config.json   # 初回のみ (無ければ既定値で自動生成)
-.\run.ps1                                   # 起動
+packaging\build.ps1
 ```
 
-1. 起動すると「Windows Pointer & Keyboard」としてアドバタイズが始まる
-2. iPad の **設定 > Bluetooth** から接続(ペアリングは自動。確認コード入力は不要)
-3. **マウスカーソルを画面右端(設定変更可)にグッと押し込む** → iPad 側にカーソル出現
-4. そのままマウス・キーボード・ホイール・メディアキーが iPad に流れる
-5. **iPad 側で共有エッジ(左端)へカーソルを押し戻す** → Windows に復帰
-6. 緊急時は `Ctrl+Alt+Q`(設定変更可)で強制復帰。BLE が切断された場合も自動復帰
+This fetches firmware + wdi-simple, runs PyInstaller (`dist\WinUC\`), and — if
+[Inno Setup 6](https://jrsoftware.org/isdl.php) is installed — compiles
+`dist\installer\WinUC-Setup-*.exe`.
 
-管理者権限で実行すると、昇格したウィンドウ(タスクマネージャ等)が前面でも
-入力を確実に奪えるようになる(推奨)。
+## Settings
 
-## 設定 (config.json)
+Settings live in the tray **Settings…** dialog (stored at
+`%LOCALAPPDATA%\WinUC\config.json`).
 
-| キー | 既定値 | 説明 |
+| Setting | Default | Meaning |
 |---|---|---|
-| `edge` | `"right"` | iPad がいる方向 (`right`/`left`/`top`/`bottom`) |
-| `push_threshold_px` | `80` | 突き抜けに必要な押し込み量(Mac の「抵抗感」) |
-| `return_threshold_px` | `80` | 戻りに必要な押し戻し量 |
-| `speed` | `1.0` | iPad へ送る移動量の倍率 |
-| `natural_scroll` | `false` | スクロール方向の反転 |
-| `ipad_screen` | `[1194, 834]` | iPad の画面サイズ(pt)。戻り位置の推定精度に影響 |
-| `swap_alt_win` | `false` | Alt⇔Win 入れ替え(Alt キーを Cmd として使う) |
-| `jis_kana_mapping` → `jis_mac_style` | `true` | 変換/無変換 → かな/英数 (Apple JIS 風) |
-| `release_hotkey` | `"ctrl+alt+q"` | 強制復帰ホットキー |
-| `forward_injected` | `true` | X-Mouse Button Control 等が注入した変換後イベントも iPad へ転送 |
-| `passthrough_buttons` | `[]` | REMOTE 中も XMBC 等に処理させるボタン (`"left"/"right"/"middle"/"x1"/"x2"`) |
-| `transport` | `"usb:[driver=rtk]0"` | bumble のトランスポート指定 |
+| iPad edge | `right` | Which screen edge crosses to the iPad (`right`/`left`/`top`/`bottom`) |
+| Pointer speed | `1.0` | Multiplier for motion sent to the iPad |
+| Push-through / push-back distance | `80` px | Resistance before crossing / returning (the macOS "push through the edge" feel) |
+| Natural scrolling | off | Invert scroll direction |
+| iPad screen (pt) | `1194 × 834` | Used to estimate the return position |
+| Swap Alt / Win | off | Use Alt as ⌘ instead of the Win key |
+| JIS 変換/無変換 → かな/英数 | on | Map JIS conversion keys to Kana/Eisū |
+| Force-return hotkey | `ctrl+alt+q` | Immediately return control to Windows |
+| Mouse button actions | — | Assign `drag_scroll` / `wheel_up` / `wheel_down` to buttons `x1`/`x2`/`middle` |
 
-**ボタン→スクロール変換 (XMBC の代替)**: XMBC のスクロール変換はウィンドウへ直接
-メッセージを送る方式のため iPad へは転送できない。代わりに `button_actions` で
-WinUC 側が iPad 操作中の変換を行う (XMBC の「Mouse Button 4/5」= `x1`/`x2`):
+**Key mapping:** Win → ⌘ Command, Alt → ⌥ Option, Ctrl → Control (remappable in
+iPadOS Settings › Hardware Keyboard › Modifier Keys). Media keys work. On the
+iPad, set Settings › General › Keyboard › Hardware Keyboard › **Keyboard Type =
+JIS** for a JIS keyboard.
 
-```json
-"button_actions": { "x1": "drag_scroll", "x2": "drag_scroll" }
-```
+**Mouse buttons → scroll:** X-Mouse Button Control's scroll conversion sends
+window messages that can't be captured, so assign scroll actions here instead —
+WinUC does the conversion natively while you're controlling the iPad.
 
-- `drag_scroll`: ボタンを押しながらマウス移動でスクロール (感度は `drag_scroll_px`、
-  方向は `drag_scroll_invert` で調整)
-- `wheel_up` / `wheel_down`: 押すと 1 ノッチ、押しっぱなしで連続スクロール
+## Differences from macOS Universal Control
 
-`passthrough_buttons` は「iPad 操作中もローカルの XMBC 等に処理させたいボタン」を
-列挙する上級者向けオプション (SendInput 型のツール向け)。`button_actions` と併用不可。
-
-iPad 側の推奨設定: 設定 > 一般 > キーボード > ハードウェアキーボード > **キーボードの種類 = JIS**
-(JIS 配列キーボードの場合)。ポインタ速度は 設定 > 一般 > トラックパッドとマウス で調整。
-
-## キーの対応
-
-- **Win キー → Cmd ⌘ / Alt → Option ⌥ / Ctrl → Ctrl** (iPad の 設定 > ハードウェアキーボード > 修飾キー で入れ替え可)
-- 変換 → かな、無変換 → 英数(`jis_mac_style: false` で International4/5 の生マッピング)
-- 音量・再生/停止などのメディアキー対応
-- `Cmd+Tab`(Win+Tab として打つ)、`Cmd+Space` など iPad のショートカットがそのまま使える
-
-## Mac の Universal Control との違い(原理的な限界)
-
-| 機能 | Mac | WinUC |
+| Feature | macOS | WinUC |
 |---|---|---|
-| カーソル/キーボードのエッジ移動 | ✅ | ✅ |
-| 突き抜けの抵抗感・押し戻しで復帰 | ✅ | ✅ |
-| スクロール・メディアキー | ✅ | ✅ |
-| 自動再接続 | ✅ | ✅ (ボンディング永続化) |
-| ファイルのドラッグ&ドロップ | ✅ | ❌ 不可能 |
-| ユニバーサルクリップボード | ✅ | ❌ 不可能 |
+| Cursor / keyboard edge crossing | ✅ | ✅ |
+| Push-through resistance & push-back return | ✅ | ✅ |
+| Scrolling & media keys | ✅ | ✅ |
+| Automatic reconnect | ✅ | ✅ (persisted bonding) |
+| File drag & drop | ✅ | ❌ not possible |
+| Universal Clipboard | ✅ | ❌ not possible |
 
-ドラッグ&ドロップとクリップボード共有は、Apple が Wi-Fi (AWDL) 上の Continuity
-プロトコルで実現しているもので、Bluetooth HID の経路では原理的に再現できない
-(iPad 側にアプリをインストールしない前提では代替手段が存在しない)。
+Drag-and-drop and clipboard sharing use Apple's Continuity over Wi-Fi (AWDL),
+which cannot be reproduced over a Bluetooth HID link without an app on the iPad.
 
-その他の制限:
+Other limits: capture pauses during UAC / secure-desktop prompts; `Ctrl+Alt+Del`
+is reserved by Windows; iPadOS applies its own pointer acceleration (tune speed
+on the iPad).
 
-- UAC の昇格プロンプト(セキュアデスクトップ)表示中はキャプチャが中断される
-- `Ctrl+Alt+Del` は OS 予約のため転送できない
-- iPad 側のポインタ加速は iPadOS が独自に適用する(速度は iPad 側設定で調整)
+## Project layout
 
-## 開発
-
-```powershell
-.venv\Scripts\python.exe -m pytest tests        # 28 tests
-.\run.ps1 --selftest                            # 仮想コントローラで BLE 一気通貫検証
-.\run.ps1 --no-capture                          # フックなしで BLE のみ (ペアリング確認用)
-.\run.ps1 -v                                    # bumble の詳細ログ
-```
-
-| モジュール | 役割 |
+| Module | Role |
 |---|---|
-| `winuc/hid_reports.py` | HID レポートディスクリプタ & レポート組み立て |
-| `winuc/keymap.py` | Set-1 スキャンコード → HID usage (JIS 対応) |
-| `winuc/ble_peripheral.py` | bumble HOGP ペリフェラル (HID/Battery/DIS, Just Works ボンディング) |
-| `winuc/capture.py` | LL フック + Raw Input + ClipCursor による入力キャプチャ |
-| `winuc/edge.py` | LOCAL→PUSHING→REMOTE 状態機械 (純ロジック) |
-| `winuc/app.py` | フックスレッド⇔asyncio 橋渡し、移動の合成送信 |
-| `winuc/selftest.py` | 仮想コントローラ 2 台での統合検証 |
+| `winuc/hid_reports.py` | HID report descriptor & report packing |
+| `winuc/keymap.py` | Set-1 scancode → HID usage (incl. JIS) |
+| `winuc/ble_peripheral.py` | bumble HOGP peripheral (HID/Battery/DIS, Just-Works bonding) |
+| `winuc/capture.py` | LL hooks + Raw Input + ClipCursor input capture |
+| `winuc/edge.py` | LOCAL→PUSHING→REMOTE state machine (pure logic) |
+| `winuc/app.py` | Hook-thread ↔ asyncio bridge, coalesced sends |
+| `winuc/service.py` | Background service supervisor (start/stop, status) |
+| `winuc/driver.py` | Automatic WinUSB switch/restore (libwdi + pnputil) |
+| `winuc/gui/` | Tray icon, settings dialog, setup wizard |
+| `winuc/selftest.py` | Virtual two-controller integration check |
 
-## ライセンス
+## License
 
-[MIT License](LICENSE)。依存の [bumble](https://github.com/google/bumble) は Apache-2.0。
-Realtek ファームウェアはリポジトリに含めていません (Realtek のライセンス条件に従い、
-セットアップ時に Linux カーネルの firmware リポジトリから各自ダウンロードします)。
+[MIT](LICENSE). Dependency [bumble](https://github.com/google/bumble) is
+Apache-2.0. `wdi-simple.exe` (bundled at build time) comes from
+[libwdi](https://github.com/pbatard/libwdi) and is LGPL-3.0, shipped as a
+separate invoked executable. Realtek firmware is not included in the repository;
+it is downloaded from the Linux kernel firmware repo during setup.

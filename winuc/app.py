@@ -1,10 +1,10 @@
-"""アプリ本体: 入力キャプチャ (フックスレッド) と BLE (asyncio) の橋渡し。"""
+"""Application core: bridges the input-capture hook thread and the BLE (asyncio) side."""
 
 from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any
+from typing import Any, Callable
 
 from bumble.device import Device
 from bumble.transport import open_transport
@@ -17,8 +17,14 @@ from .edge import EdgeStateMachine, State
 
 logger = logging.getLogger(__name__)
 
-# BLE 送信の最小間隔 (秒)。接続インターバル (~11-15ms) より細かく送っても無駄。
+# Minimum interval between BLE sends. Sending faster than the connection
+# interval (~11-15 ms) is wasted work.
 SEND_INTERVAL = 0.004
+
+# Upper bound on the hook-thread event queue. If the BLE link stalls we must
+# not buffer input events without limit (long-running tray app: no leaks).
+# When full, the oldest events are dropped -- stale motion is worthless anyway.
+MAX_QUEUE = 2048
 
 
 class UniversalControlApp:
@@ -34,40 +40,66 @@ class UniversalControlApp:
         )
         self.capture: InputCapture | None = None
         self.loop: asyncio.AbstractEventLoop | None = None
-        self.queue: asyncio.Queue[tuple] = asyncio.Queue()
+        self.queue: asyncio.Queue[tuple] = asyncio.Queue(maxsize=MAX_QUEUE)
         self.keyboard_state = keymap.KeyboardState()
         self._buttons = 0
         self._consumer_down: int | None = None
         self._wheel_acc = 0.0
         self._hwheel_acc = 0.0
-        # ボタン→スクロール変換 (index → action)
+        # Button -> scroll conversion (button index -> action).
         self._button_actions = {
             BUTTON_NAMES[name]: action
             for name, action in config.button_actions.items()
             if name in BUTTON_NAMES
         }
-        self._drag_buttons: set[int] = set()  # 押下中の drag_scroll ボタン
+        self._drag_buttons: set[int] = set()  # held drag_scroll buttons
         self._wheel_repeat_task: asyncio.Task | None = None
+        self._stop_event: asyncio.Event | None = None
+        # Optional status callback: called (thread-safely) on connection changes
+        # with one of "advertising" | "connected" | "ready".
+        self.on_status: Callable[[str], None] | None = None
 
     # ------------------------------------------------------------ plumbing
 
     def _emit_from_hook_thread(self, event: tuple) -> None:
-        assert self.loop is not None
-        self.loop.call_soon_threadsafe(self.queue.put_nowait, event)
+        loop = self.loop
+        if loop is None:
+            return
+        loop.call_soon_threadsafe(self._enqueue, event)
+
+    def _enqueue(self, event: tuple) -> None:
+        try:
+            self.queue.put_nowait(event)
+        except asyncio.QueueFull:
+            # Drop the oldest event to make room; never grow without bound.
+            try:
+                self.queue.get_nowait()
+                self.queue.put_nowait(event)
+            except (asyncio.QueueEmpty, asyncio.QueueFull):
+                pass
 
     def _on_ble_state_change(self) -> None:
         ready = self.peripheral.ready
         if self.capture is not None:
             self.capture.armed = ready
             if not ready and self.machine.state != State.LOCAL:
-                logger.warning("BLE 切断のため Windows に制御を戻します")
+                logger.warning("BLE link lost -- returning control to Windows")
                 self.capture.force_release()
-        logger.info("BLE 状態: %s", "転送可能" if ready else "未接続")
+        logger.info("BLE state: %s", "ready" if ready else "not connected")
+        if self.on_status is not None:
+            if ready:
+                status = "ready"
+            elif self.peripheral.connected:
+                status = "connected"
+            else:
+                status = "advertising"
+            self.on_status(status)
 
     # --------------------------------------------------------------- setup
 
     async def run(self, enable_capture: bool = True) -> None:
         self.loop = asyncio.get_running_loop()
+        self._stop_event = asyncio.Event()
         enable_dpi_awareness()
 
         async with await open_transport(self.config.transport) as hci_transport:
@@ -79,16 +111,8 @@ class UniversalControlApp:
             self.peripheral.attach(device)
             self.peripheral.on_state_change = self._on_ble_state_change
             await self.peripheral.start()
-
-            print()
-            print("=" * 64)
-            print(f"  iPad の 設定 > Bluetooth から")
-            print(f"  「{self.config.device_name}」 に接続してください。")
-            print(f"  接続後、マウスカーソルを画面の {self._edge_label()} に")
-            print(f"  押し込むと iPad 側へ移動します。")
-            print(f"  強制的に戻る: {self.config.release_hotkey}")
-            print("=" * 64)
-            print()
+            if self.on_status is not None:
+                self.on_status("advertising")
 
             if enable_capture:
                 self.capture = InputCapture(
@@ -101,21 +125,33 @@ class UniversalControlApp:
                 self.capture.start()
                 self.capture.wait_started()
 
+            pump = asyncio.create_task(self._pump_events())
             try:
-                await self._pump_events()
+                await self._stop_event.wait()
             finally:
+                pump.cancel()
+                try:
+                    await pump
+                except asyncio.CancelledError:
+                    pass
+                if self._wheel_repeat_task is not None:
+                    self._wheel_repeat_task.cancel()
+                    self._wheel_repeat_task = None
                 if self.capture is not None:
                     self.capture.stop()
+                    self.capture = None
+                await self.peripheral.release_all()
 
-    def _edge_label(self) -> str:
-        return {"right": "右端", "left": "左端", "top": "上端", "bottom": "下端"}[
-            self.config.edge
-        ]
+    def request_stop(self) -> None:
+        """Ask the run() loop to shut down cleanly (callable from any thread)."""
+        loop, event = self.loop, self._stop_event
+        if loop is not None and event is not None:
+            loop.call_soon_threadsafe(event.set)
 
     # --------------------------------------------------------- event pump
 
     async def _pump_events(self) -> None:
-        """フックスレッドからのイベントを取り出し、マウス移動を合成して送る。"""
+        """Drain hook-thread events, coalescing mouse motion into batched sends."""
         while True:
             event = await self.queue.get()
             dx = dy = 0
@@ -125,7 +161,7 @@ class UniversalControlApp:
                 kind = event[0]
                 if kind == "move":
                     if self._drag_buttons:
-                        # ドラッグスクロール中: 移動をスクロールに変換
+                        # Drag-scroll: convert motion into wheel notches.
                         sign = -1 if self.config.drag_scroll_invert else 1
                         px = max(1, self.config.drag_scroll_px)
                         self._wheel_acc += sign * -event[2] / px
@@ -140,7 +176,7 @@ class UniversalControlApp:
                     self._hwheel_acc += sign * event[2] / 120.0
                     flush_needed = True
                 else:
-                    # 順序を保つ: ボタン/キーの前に溜まった移動を送る
+                    # Preserve ordering: flush pending motion before button/key.
                     if flush_needed:
                         await self._flush_motion(dx, dy)
                         dx = dy = 0
@@ -182,7 +218,7 @@ class UniversalControlApp:
             await self._handle_state(event[1])
 
     async def _handle_button_action(self, index: int, action: str, down: bool) -> None:
-        """ボタン→スクロール変換 (ボタン自体は iPad に送らない)。"""
+        """Button -> scroll conversion (the button itself is not sent to the iPad)."""
         if action == "drag_scroll":
             if down:
                 self._drag_buttons.add(index)
@@ -211,7 +247,7 @@ class UniversalControlApp:
     async def _handle_key(self, event: tuple[Any, ...]) -> None:
         _, vk, scan, extended, down = event
 
-        # メディアキー等は Consumer usage で送る
+        # Media / system keys go out as Consumer-page usages.
         consumer = keymap.VK_TO_CONSUMER.get(vk)
         if consumer is not None:
             if not self.peripheral.ready:
@@ -245,6 +281,6 @@ class UniversalControlApp:
         if self._wheel_repeat_task is not None:
             self._wheel_repeat_task.cancel()
             self._wheel_repeat_task = None
-        if state == "local":  # local へ復帰
+        if state == "local":  # returning to Windows
             self._consumer_down = None
             await self.peripheral.release_all()

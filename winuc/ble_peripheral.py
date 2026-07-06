@@ -1,13 +1,13 @@
-"""BLE HOGP (HID over GATT) ペリフェラル。
+"""BLE HOGP (HID over GATT) peripheral.
 
-Windows を BLE マウス+キーボードとして振る舞わせる。iPad は
-Settings > Bluetooth からこのデバイスにペアリングするだけでよい。
+Makes Windows act as a BLE mouse + keyboard. The iPad only needs to
+pair with this device from Settings > Bluetooth.
 
-- HID Service (0x1812): Report Map / Reports は暗号化必須にする。
-  iPad は暗号化不足エラーを見て自動的にペアリング (Just Works + bonding) を開始する。
-- Battery Service (0x180F), Device Information Service (0x180A, PnP ID 付き) は
-  HOGP 仕様上必須。
-- ボンディング鍵は JsonKeyStore に永続化され、次回以降は自動再接続する。
+- HID Service (0x1812): Report Map / Reports require encryption.
+  The iPad sees the insufficient-encryption error and automatically starts pairing (Just Works + bonding).
+- Battery Service (0x180F) and Device Information Service (0x180A, with PnP ID) are
+  mandatory per the HOGP spec.
+- Bonding keys are persisted to JsonKeyStore, so subsequent connections reconnect automatically.
 """
 
 from __future__ import annotations
@@ -55,7 +55,7 @@ HID_OUTPUT_REPORT = 0x02
 
 
 def _battery_percent() -> int:
-    """Windows のバッテリー残量 (デスクトップ等、取得不能なら 100)。"""
+    """Windows battery level (100 if unavailable, e.g. on desktops)."""
     if sys.platform != "win32":
         return 100
 
@@ -80,7 +80,7 @@ def _battery_percent() -> int:
 
 
 class HogpPeripheral:
-    """HOGP コンボデバイス (キーボード + コンシューマ + マウス)。"""
+    """HOGP combo device (keyboard + consumer + mouse)."""
 
     def __init__(self, config: Config, keystore_file: str | None = None) -> None:
         self.config = config
@@ -88,7 +88,7 @@ class HogpPeripheral:
         self.device: Device | None = None
         self._subscribed = False
         self._connected = False
-        # ボンド済みホストとの再接続セッション (CCCD の再書き込みなしで通知を送る)
+        # Reconnection session with a bonded host (send notifications without re-writing the CCCD)
         self._resumed = False
         self.on_state_change: Callable[[], None] | None = None
 
@@ -164,7 +164,7 @@ class HogpPeripheral:
                 self._kbd_input,
                 self._consumer_input,
                 self._mouse_input,
-                # キーボード LED 出力レポート
+                # Keyboard LED output report
                 Characteristic(
                     GATT_REPORT_CHARACTERISTIC,
                     Characteristic.Properties.READ
@@ -230,7 +230,7 @@ class HogpPeripheral:
         return [dis, hid_service, battery]
 
     def _advertising_data(self) -> bytes:
-        # アドバタイジング PDU は 31 バイトまで。名前はスキャンレスポンス側に置く。
+        # The advertising PDU is limited to 31 bytes. The name is placed in the scan response.
         return bytes(
             AdvertisingData(
                 [
@@ -269,20 +269,20 @@ class HogpPeripheral:
             else f"JsonKeyStore:{self._keystore_file}",
             classic_enabled=False,
         )
-        # アドレスから決定的に IRK を導出 (毎回同じ鍵で再接続できるように)
+        # Deterministically derive the IRK from the address (so we reconnect with the same key every time)
         device_config.irk = (bytes(address) * 3)[:16]
         device_config.advertising_data = self._advertising_data()
         device_config.scan_response_data = self._scan_response_data()
         return device_config
 
     def attach(self, device: Device) -> None:
-        """作成済みの bumble Device に GATT サービス・ペアリング設定を取り付ける。"""
+        """Attach GATT services and pairing configuration to an already-created bumble Device."""
         self.device = device
         device.add_services(self._build_services())
-        # identity_address_type=RANDOM が重要: 未指定だと bumble はドングルの
-        # 公開アドレスをアイデンティティとして配布するが、アドバタイズは
-        # 設定の静的ランダムアドレスで行うため、iPad が再接続時に
-        # 「別のデバイス」と判断して自動再接続しなくなる。
+        # identity_address_type=RANDOM is important: if unspecified, bumble distributes the
+        # dongle's public address as the identity, but advertising is done with the
+        # configured static random address, so on reconnect the iPad judges it to be
+        # "a different device" and stops reconnecting automatically.
         device.pairing_config_factory = lambda _connection: PairingConfig(
             sc=True,
             mitm=False,
@@ -296,7 +296,7 @@ class HogpPeripheral:
         await self.device.power_on()
         await self.device.start_advertising(auto_restart=True)
         logger.info(
-            "アドバタイズ開始: name=%r address=%s",
+            "Advertising started: name=%r address=%s",
             self.config.device_name,
             self.config.address,
         )
@@ -304,7 +304,7 @@ class HogpPeripheral:
     # ---------------------------------------------------------------- events
 
     def _on_connection(self, connection) -> None:
-        logger.info("接続: %s", connection.peer_address)
+        logger.info("Connected: %s", connection.peer_address)
         self._connected = True
         connection.on(connection.EVENT_DISCONNECTION, self._on_disconnection)
         connection.on(
@@ -315,10 +315,10 @@ class HogpPeripheral:
         self._notify_state()
 
     async def _ensure_encryption(self, connection) -> None:
-        """再接続時: ボンド済みの相手が暗号化を始めない場合、こちらから促す。
+        """On reconnect: if a bonded peer does not start encryption, prompt it ourselves.
 
-        HID ペリフェラルの定石で、SMP Security Request を送ると
-        ボンド済みのセントラルは保存済み LTK で即座に再暗号化する。
+        As is standard for HID peripherals, sending an SMP Security Request makes a
+        bonded central immediately re-encrypt using the stored LTK.
         """
         await asyncio.sleep(1.0)
         try:
@@ -330,7 +330,7 @@ class HogpPeripheral:
                 return
             keys = await self.device.keystore.get(str(connection.peer_address))
             if keys is not None:
-                logger.info("ボンド済みホストの再接続 — 暗号化を要求します")
+                logger.info("Bonded host reconnecting — requesting encryption")
                 self.device.request_pairing(connection)
         except Exception:
             logger.debug("_ensure_encryption failed", exc_info=True)
@@ -345,10 +345,10 @@ class HogpPeripheral:
             keys = await self.device.keystore.get(str(connection.peer_address))
             if keys is None:
                 return
-            # ボンド済みホストは HOGP 仕様上、購読状態 (CCCD) をペリフェラルが
-            # 記憶している前提で再接続してくる (CCCD を書き直さない)。
-            # 実際に使っていたホストなら必ず購読済みなので、購読状態を復元する。
-            logger.info("再接続完了 — 購読状態を復元しました (入力転送可能)")
+            # Per the HOGP spec, a bonded host reconnects assuming the peripheral
+            # remembers the subscription state (CCCD) (it does not re-write the CCCD).
+            # A host that was actually in use is always subscribed, so restore the subscription state.
+            logger.info("Reconnection complete — subscription state restored (input forwarding enabled)")
             self._subscribed = True
             self._resumed = True
             self._notify_state()
@@ -356,7 +356,7 @@ class HogpPeripheral:
         asyncio.ensure_future(resume_if_bonded())
 
     def _on_disconnection(self, reason) -> None:
-        logger.info("切断 (reason=%s)", reason)
+        logger.info("Disconnected (reason=%s)", reason)
         self._connected = False
         self._subscribed = False
         self._resumed = False
@@ -364,9 +364,9 @@ class HogpPeripheral:
 
     def _on_subscription(self, _connection, notify_enabled, _indicate_enabled) -> None:
         if notify_enabled:
-            logger.info("ホストが入力レポートを購読 — 入力転送が可能になりました")
+            logger.info("Host subscribed to input reports — input forwarding is now enabled")
             self._subscribed = True
-            self._resumed = False  # 実際の CCCD が書かれたので force 通知は不要
+            self._resumed = False  # A real CCCD was written, so forced notifications are not needed
         self._notify_state()
 
     def _notify_state(self) -> None:
@@ -374,8 +374,13 @@ class HogpPeripheral:
             self.on_state_change()
 
     @property
+    def connected(self) -> bool:
+        """True once a central (iPad) is connected, before it subscribes."""
+        return self._connected
+
+    @property
     def ready(self) -> bool:
-        """iPad が接続済みで、入力を受け付けられる状態か。"""
+        """True when the iPad is connected and ready to accept input reports."""
         return self._connected and self._subscribed
 
     # ----------------------------------------------------------------- input
@@ -384,7 +389,7 @@ class HogpPeripheral:
         self, buttons: int, dx: int, dy: int, wheel: int = 0, hwheel: int = 0
     ) -> None:
         assert self.device is not None
-        # int16 を超える移動は分割して送る
+        # Split motion that exceeds int16 and send it in chunks
         while True:
             step_x = max(-32767, min(32767, dx))
             step_y = max(-32767, min(32767, dy))
@@ -410,12 +415,12 @@ class HogpPeripheral:
         await self.device.notify_subscribers(self._consumer_input, force=self._resumed)
 
     async def release_all(self) -> None:
-        """遷移時の押しっぱなし防止: 全キー・全ボタンを解放。"""
+        """Prevent stuck keys on transition: release all keys and all buttons."""
         if self.device is None or not self.ready:
             return
         try:
             await self.send_keyboard(0, ())
             await self.send_consumer(0)
             await self.send_mouse(0, 0, 0)
-        except Exception:  # 切断直後などは無視してよい
+        except Exception:  # Fine to ignore, e.g. right after a disconnect
             logger.debug("release_all failed", exc_info=True)

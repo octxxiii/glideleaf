@@ -1,16 +1,16 @@
-"""Windows のキー入力 → USB HID usage への変換。
+"""Convert Windows key input -> USB HID usage.
 
-低レベルキーボードフック (WH_KEYBOARD_LL) から得られる
-Set-1 スキャンコード + 拡張フラグを物理キーの識別子として扱い、
-HID Keyboard/Keypad usage page (0x07) の usage に変換する。
-(VK コードはレイアウト依存なので使わない。ただしメディアキー等は VK で判定する。)
+Treats the Set-1 scan code + extended flag obtained from the
+low-level keyboard hook (WH_KEYBOARD_LL) as the physical-key identifier,
+and converts it to a usage on the HID Keyboard/Keypad usage page (0x07).
+(VK codes are layout-dependent so we avoid them, except media keys, etc., which are matched by VK.)
 
-iPad 側の修飾キー解釈: GUI(Win) = Cmd, Alt = Option, Ctrl = Ctrl。
+Modifier interpretation on the iPad side: GUI(Win) = Cmd, Alt = Option, Ctrl = Ctrl.
 """
 
 from __future__ import annotations
 
-# --- HID modifier usages (0xE0-0xE7) → modifier ビット ---
+# --- HID modifier usages (0xE0-0xE7) → modifier bits ---
 MODIFIER_USAGES = {
     0xE0: 0x01,  # Left Control
     0xE1: 0x02,  # Left Shift
@@ -22,7 +22,7 @@ MODIFIER_USAGES = {
     0xE7: 0x80,  # Right GUI
 }
 
-# --- Set-1 スキャンコード (非拡張) → HID usage ---
+# --- Set-1 scan codes (non-extended) → HID usage ---
 _BASE = {
     0x01: 0x29,  # Esc
     0x02: 0x1E, 0x03: 0x1F, 0x04: 0x20, 0x05: 0x21, 0x06: 0x22,  # 1-5
@@ -65,7 +65,7 @@ _BASE = {
     0x4F: 0x59, 0x50: 0x5A, 0x51: 0x5B,  # KP 1 2 3
     0x52: 0x62,  # KP 0
     0x53: 0x63,  # KP .
-    0x56: 0x64,  # Non-US \ (ISO 102番目のキー)
+    0x56: 0x64,  # Non-US \ (ISO 102nd key)
     0x57: 0x44,  # F11
     0x58: 0x45,  # F12
     0x59: 0x67,  # KP =
@@ -73,14 +73,14 @@ _BASE = {
     0x69: 0x6D, 0x6A: 0x6E, 0x6B: 0x6F, 0x6C: 0x70, 0x6D: 0x71,  # F18-F22
     0x6E: 0x72, 0x76: 0x73,                                       # F23, F24
     # --- JIS (OADG109) ---
-    0x70: 0x88,  # ひらがな/カタカナ → International2
+    0x70: 0x88,  # ひらがな/カタカナ (Hiragana/Katakana) → International2
     0x73: 0x87,  # ろ (\_) → International1
-    0x79: 0x8A,  # 変換 → International4
-    0x7B: 0x8B,  # 無変換 → International5
+    0x79: 0x8A,  # 変換 (Convert) → International4
+    0x7B: 0x8B,  # 無変換 (Non-convert) → International5
     0x7D: 0x89,  # ¥ → International3
 }
 
-# --- Set-1 スキャンコード (E0 拡張) → HID usage ---
+# --- Set-1 scan codes (E0 extended) → HID usage ---
 _EXTENDED = {
     0x1C: 0x58,  # Keypad Enter
     0x1D: 0xE4,  # Right Ctrl
@@ -102,15 +102,15 @@ _EXTENDED = {
     0x5D: 0x65,  # Menu → Application
 }
 
-# --- JIS キーを Mac 風 (かな/英数) にするマッピング ---
-# Apple の JIS キーボードは Lang1(かな)=0x90 / Lang2(英数)=0x91 を送る。
+# --- Mapping to make JIS keys Mac-style (かな/英数) ---
+# Apple's JIS keyboard sends Lang1(かな)=0x90 / Lang2(英数)=0x91.
 JIS_MAC_STYLE = {
     0x8A: 0x90,  # 変換 → かな (Lang1)
     0x8B: 0x91,  # 無変換 → 英数 (Lang2)
     0x88: 0x90,  # ひらがな/カタカナ → かな (Lang1)
 }
 
-# --- メディアキー等: VK コード → Consumer page usage ---
+# --- Media keys, etc.: VK code → Consumer page usage ---
 VK_TO_CONSUMER = {
     0xAD: 0x00E2,  # VK_VOLUME_MUTE
     0xAE: 0x00EA,  # VK_VOLUME_DOWN
@@ -121,7 +121,7 @@ VK_TO_CONSUMER = {
     0xB3: 0x00CD,  # VK_MEDIA_PLAY_PAUSE
 }
 
-# Consumer usage: Globe キー (AC Next Keyboard Layout Select)
+# Consumer usage: Globe key (AC Next Keyboard Layout Select)
 CONSUMER_GLOBE = 0x029D
 
 
@@ -131,10 +131,10 @@ def scan_to_usage(
     vk: int = 0,
     jis_mac_style: bool = True,
 ) -> int | None:
-    """Set-1 スキャンコードを HID usage に変換する。不明なら None。
+    """Convert a Set-1 scan code to a HID usage. None if unknown.
 
-    Pause キーは E1 プレフィックス付きで LL フックには vk=VK_PAUSE,
-    scan=0x45 (非拡張) として届くため VK で特別扱いする。
+    The Pause key arrives at the LL hook with an E1 prefix as vk=VK_PAUSE,
+    scan=0x45 (non-extended), so it is special-cased by VK.
     """
     if vk == 0x13:  # VK_PAUSE
         return 0x48
@@ -145,19 +145,19 @@ def scan_to_usage(
 
 
 def swap_alt_gui(usage: int) -> int:
-    """Alt と GUI(Win) を入れ替える (Mac 配列に慣れた指のためのオプション)。"""
+    """Swap Alt and GUI(Win) (an option for fingers used to the Mac layout)."""
     return {0xE2: 0xE3, 0xE3: 0xE2, 0xE6: 0xE7, 0xE7: 0xE6}.get(usage, usage)
 
 
 class KeyboardState:
-    """押下中のキー/修飾キーを追跡し、8バイトレポートの中身を組み立てる。"""
+    """Track pressed keys/modifiers and build the contents of the 8-byte report."""
 
     def __init__(self) -> None:
         self.modifiers = 0
-        self.keys: list[int] = []  # 押下順の非修飾 usage (6KRO)
+        self.keys: list[int] = []  # Non-modifier usages in press order (6KRO)
 
     def press(self, usage: int) -> bool:
-        """状態を更新。レポート内容が変化したら True。"""
+        """Update state. True if the report contents changed."""
         if usage in MODIFIER_USAGES:
             bit = MODIFIER_USAGES[usage]
             if self.modifiers & bit:
@@ -165,7 +165,7 @@ class KeyboardState:
             self.modifiers |= bit
             return True
         if usage in self.keys:
-            return False  # キーリピートは HID では送らない (ホスト側で行う)
+            return False  # Key repeat is not sent over HID (the host handles it)
         if len(self.keys) >= 6:
             self.keys.pop(0)
         self.keys.append(usage)

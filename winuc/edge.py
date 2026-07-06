@@ -1,15 +1,15 @@
-"""画面端の突き抜け判定と、iPad 側の仮想カーソル追跡。
+"""Screen-edge break-through detection and virtual cursor tracking on the iPad side.
 
-macOS Universal Control の UX を再現する:
+Reproduces the UX of macOS Universal Control:
 
-  LOCAL   — 通常状態。カーソルが設定されたエッジの最外周ピクセルに達すると PUSHING へ。
-  PUSHING — カーソルはエッジにピン留めされ、さらに押し込んだ量 (raw delta) を蓄積。
-            push_threshold_px を超えたら REMOTE へ「突き抜け」る。
-            逆方向へ動かす/しばらく押し込まないとキャンセルして LOCAL へ戻る。
-  REMOTE  — 全入力を奪って iPad へ転送。送った移動量から iPad 上のカーソル位置を
-            推定し、共有エッジへ push し戻されたら LOCAL へ戻る。
+  LOCAL   — Normal state. When the cursor reaches the outermost pixel of the configured edge, go to PUSHING.
+  PUSHING — The cursor is pinned to the edge and further push amount (raw delta) is accumulated.
+            When it exceeds push_threshold_px, "break through" to REMOTE.
+            Moving in the opposite direction / not pushing for a while cancels and returns to LOCAL.
+  REMOTE  — Capture all input and forward it to the iPad. Estimate the cursor position on the iPad
+            from the motion sent, and when pushed back to the shared edge, return to LOCAL.
 
-このモジュールは Win32 に依存しない純粋ロジック (ユニットテスト対象)。
+This module is pure logic with no dependency on Win32 (subject to unit tests).
 """
 
 from __future__ import annotations
@@ -35,10 +35,10 @@ class RemoteMotion:
     dx: int
     dy: int
     exited: bool
-    exit_point: tuple[int, int] | None = None  # LOCAL 復帰時の PC 側カーソル位置
+    exit_point: tuple[int, int] | None = None  # PC-side cursor position when returning to LOCAL
 
 
-# エッジごとの「外向き」単位ベクトル (PC 画面から出ていく方向)
+# Per-edge "outward" unit vector (direction leaving the PC screen)
 _OUTWARD = {
     "right": (1, 0),
     "left": (-1, 0),
@@ -69,28 +69,28 @@ class EdgeStateMachine:
         self.idle_cancel_ms = idle_cancel_ms
 
         self.state = State.LOCAL
-        # PC 側エッジ範囲 (仮想スクリーン座標)。set_edge_geometry() で設定。
-        self._edge_coord = 0       # エッジの固定座標 (right なら最大 x)
-        self._edge_lo = 0          # エッジに沿った範囲の最小値
-        self._edge_hi = 0          # 最大値
+        # PC-side edge range (virtual screen coordinates). Set by set_edge_geometry().
+        self._edge_coord = 0       # Fixed coordinate of the edge (max x for right)
+        self._edge_lo = 0          # Minimum of the range along the edge
+        self._edge_hi = 0          # Maximum
         self._push_acc = 0.0
         self._push_last_ms = 0.0
         self._entry_point = (0, 0)
-        # iPad 側仮想カーソル
+        # iPad-side virtual cursor
         self._vx = 0.0
         self._vy = 0.0
         self._return_acc = 0.0
-        # スケーリングの端数繰り越し
+        # Fractional carry-over from scaling
         self._carry_x = 0.0
         self._carry_y = 0.0
 
     # ------------------------------------------------------------- geometry
 
     def set_edge_geometry(self, edge_coord: int, lo: int, hi: int) -> None:
-        """エッジの位置を設定する。
+        """Set the edge position.
 
-        vertical エッジ (right/left) なら edge_coord=x, lo/hi=y の範囲。
-        horizontal エッジ (top/bottom) なら edge_coord=y, lo/hi=x の範囲。
+        For a vertical edge (right/left): edge_coord=x, lo/hi=range of y.
+        For a horizontal edge (top/bottom): edge_coord=y, lo/hi=range of x.
         """
         self._edge_coord = edge_coord
         self._edge_lo = lo
@@ -120,7 +120,7 @@ class EdgeStateMachine:
     def on_push_delta(self, dx: int, dy: int, now_ms: float) -> PushResult:
         assert self.state == State.PUSHING
         if now_ms - self._push_last_ms > self.idle_cancel_ms:
-            # 押し込みが途切れた: 蓄積をリセット (ピン留めしたまま様子を見る)
+            # Push was interrupted: reset accumulation (stay pinned and wait)
             self._push_acc = 0.0
         self._push_last_ms = now_ms
 
@@ -149,7 +149,7 @@ class EdgeStateMachine:
     def _enter_remote(self) -> None:
         self.state = State.REMOTE
         f = self._lateral_fraction()
-        # PC から出た側の反対側のエッジから iPad に入る
+        # Enter the iPad from the edge opposite the side we left the PC on
         if self.edge == "right":
             self._vx, self._vy = 0.0, f * (self.remote_h - 1)
         elif self.edge == "left":
@@ -171,7 +171,7 @@ class EdgeStateMachine:
         return ix, iy
 
     def _pos_along(self, x: float, y: float) -> float:
-        """共有エッジからの深さ (iPad の内側方向が正)。負ならエッジを突き抜けている。"""
+        """Depth from the shared edge (positive toward the inside of the iPad). Negative means breaking through the edge."""
         if self.edge == "right":
             return x
         if self.edge == "left":
@@ -189,10 +189,10 @@ class EdgeStateMachine:
         depth_after = self._pos_along(nx, ny)
 
         if depth_after < 0:
-            # 共有エッジを突き抜けた量を蓄積 (勢いよく戻せば一発で戻れる)
+            # Accumulate the amount broken through the shared edge (a vigorous push-back returns in one go)
             self._return_acc += -depth_after + max(0.0, depth_before)
         elif depth_after > depth_before:
-            self._return_acc = 0.0  # iPad の内側へ動いたらリセット
+            self._return_acc = 0.0  # Reset when moving toward the inside of the iPad
 
         self._vx = min(float(self.remote_w - 1), max(0.0, nx))
         self._vy = min(float(self.remote_h - 1), max(0.0, ny))
@@ -203,7 +203,7 @@ class EdgeStateMachine:
         return RemoteMotion(sdx, sdy, False)
 
     def force_local(self) -> tuple[int, int]:
-        """フェイルセーフ (切断・ホットキー): 即座に LOCAL へ戻す。"""
+        """Fail-safe (disconnect / hotkey): immediately return to LOCAL."""
         self.state = State.LOCAL
         return self._exit_point()
 

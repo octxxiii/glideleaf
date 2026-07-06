@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.pyc
+
+# 個人設定 (config.example.json をコピーして使う)
+config.json
+
+# Realtek ファームウェア (再配布しない; scripts の bumble-rtk-fw-download で取得)
+firmware/
+
+selftest_keys.json
+scripts/zadig.exe
+.ref_*.py
+.pytest_cache/

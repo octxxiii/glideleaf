@@ -1,0 +1,26 @@
+{
+  "device_name": "Windows Pointer & Keyboard",
+  "manufacturer_name": "WinUC",
+  "transport": "usb:[driver=rtk]0",
+  "address": "F0:F1:F2:AA:BB:CC",
+  "pnp": {
+    "vendor_id_source": 2,
+    "vendor_id": 4617,
+    "product_id": 1,
+    "product_version": 256
+  },
+  "edge": "right",
+  "push_threshold_px": 80,
+  "return_threshold_px": 80,
+  "speed": 1.0,
+  "natural_scroll": false,
+  "ipad_screen": [1194, 834],
+  "swap_alt_win": false,
+  "jis_mac_style": true,
+  "release_hotkey": "ctrl+alt+q",
+  "forward_injected": true,
+  "passthrough_buttons": [],
+  "button_actions": {},
+  "drag_scroll_px": 30,
+  "drag_scroll_invert": false
+}

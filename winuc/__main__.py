@@ -77,10 +77,13 @@ def main() -> int:
         vid = int(args.vid, 0)
         pid = int(args.pid, 0)
         try:
+            # Use the *_elevated variants so this works whether or not the
+            # caller (GUI, or the uninstaller) is already elevated: they run
+            # directly if admin, else re-launch with a single UAC prompt.
             if args.driver_install:
-                driver.install_winusb(vid, pid)
+                driver.install_winusb_elevated(vid, pid)
             else:
-                driver.restore_inbox(vid, pid)
+                driver.restore_inbox_elevated(vid, pid)
         except Exception as exc:  # surfaced to caller via exit code
             print(f"driver operation failed: {exc}", file=sys.stderr)
             return 1

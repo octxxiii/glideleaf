@@ -22,8 +22,10 @@ Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
 ArchitecturesInstallIn64BitMode=x64compatible
-; Driver switching needs admin; install per-machine.
-PrivilegesRequired=admin
+; Per-user install: no admin needed to install (autostart is per-user HKCU,
+; and driver switching self-elevates at runtime with a single UAC prompt).
+PrivilegesRequired=lowest
+PrivilegesRequiredOverridesAllowed=dialog
 UninstallDisplayIcon={app}\{#AppExeName}
 
 [Languages]

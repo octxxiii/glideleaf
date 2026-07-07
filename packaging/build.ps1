@@ -20,9 +20,16 @@ Write-Host "[2/5] Fetching Realtek firmware..." -ForegroundColor Cyan
 New-Item -ItemType Directory -Force (Join-Path $root "firmware") | Out-Null
 & (Join-Path $root ".venv\Scripts\bumble-rtk-fw-download.exe") --output-dir (Join-Path $root "firmware")
 
-Write-Host "[3/5] Fetching wdi-simple.exe (WinUSB installer)..." -ForegroundColor Cyan
-try { & (Join-Path $PSScriptRoot "..\scripts\fetch_wdi.ps1") } catch {
-    Write-Host "  wdi-simple fetch failed; the build continues but auto driver switch will be unavailable." -ForegroundColor Yellow
+Write-Host "[3/5] Checking for wdi-simple.exe (WinUSB installer)..." -ForegroundColor Cyan
+# Not auto-downloaded: bundling wdi-simple.exe (libwdi, LGPL-3.0) in a
+# redistributable build requires LGPL compliance (license text + source link).
+# To include it deliberately, run scripts\fetch_wdi.ps1 (or drop a self-built
+# wdi-simple.exe into tools\) BEFORE building. Absent => automatic driver
+# switching is disabled; the setup wizard falls back to manual Zadig.
+if (Test-Path (Join-Path $root "tools\wdi-simple.exe")) {
+    Write-Host "  Found tools\wdi-simple.exe -> automatic WinUSB switching enabled." -ForegroundColor Green
+} else {
+    Write-Host "  tools\wdi-simple.exe not present -> shipping without auto driver switch." -ForegroundColor Yellow
 }
 
 Write-Host "[4/5] Running PyInstaller..." -ForegroundColor Cyan

@@ -88,9 +88,16 @@ launches Zadig, and `scripts\restore_dongle.ps1` restores the in-box driver.
 packaging\build.ps1
 ```
 
-This fetches firmware + wdi-simple, runs PyInstaller (`dist\WinUC\`), and — if
+This downloads the Realtek firmware, runs PyInstaller (`dist\WinUC\`), and — if
 [Inno Setup 6](https://jrsoftware.org/isdl.php) is installed — compiles
 `dist\installer\WinUC-Setup-*.exe`.
+
+`wdi-simple.exe` (for automatic WinUSB switching) is **not** bundled by default,
+because redistributing it (libwdi, LGPL-3.0) requires shipping the LGPL license
+text and a source link. To include it deliberately, place a `wdi-simple.exe`
+under `tools\` (via `scripts\fetch_wdi.ps1` or your own libwdi build) before
+running the build. Without it, the setup wizard falls back to manual Zadig
+(`scripts\setup_dongle.ps1`).
 
 ## Settings
 

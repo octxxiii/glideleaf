@@ -11,7 +11,7 @@ from .. import driver
 from ..diagnostics import build_report, report_text
 from ..i18n import t
 from ..native_driver import RebootRequired
-from .theme import configure, font_family
+from .theme import BG, MUTED, LINE, configure, font_family
 from .icons import apply_window_icon, make_icon
 
 
@@ -36,12 +36,14 @@ class SetupWizard:
         self.win = tk.Toplevel(root)
         self.win.title(t("Glideleaf 동글 설정"))
         apply_window_icon(self.win)
-        self.win.geometry("920x680")
+        width = min(920, max(820, self.win.winfo_screenwidth() - 80))
+        height = min(680, max(620, self.win.winfo_screenheight() - 80))
+        self.win.geometry(f"{width}x{height}")
         self.win.minsize(820, 620)
         self.win.protocol("WM_DELETE_WINDOW", self._close)
         self.win.columnconfigure(0, weight=1)
         self.win.rowconfigure(0, weight=1)
-        frm = ttk.Frame(self.win, padding=24)
+        frm = ttk.Frame(self.win, padding=18)
         frm.grid(sticky="nsew")
         frm.columnconfigure(0, weight=1)
         frm.rowconfigure(2, weight=1)
@@ -51,7 +53,8 @@ class SetupWizard:
         heading.grid(row=0, column=0, sticky="w", pady=(0, 7))
         ttk.Label(heading, image=self.brand_icon).pack(side="left", padx=(0, 10))
         ttk.Label(heading, text=t("전용 동글 연결하기"), font=(font_family(), 18, "bold")).pack(side="left")
-        ttk.Label(frm, text=t("목록에서 동글을 선택하고 동글 연결을 누르세요. 이미 준비된 동글은 적용 후 바로 사용할 수 있습니다."), wraplength=830).grid(row=1, column=0, sticky="w", pady=(0, 17))
+        ttk.Label(frm, text=t("목록에서 동글을 선택하고 동글 연결을 누르세요. 이미 준비된 동글은 적용 후 바로 사용할 수 있습니다."),
+                  foreground=MUTED, wraplength=830).grid(row=1, column=0, sticky="w", pady=(0, 12))
         table_frame = ttk.Frame(frm)
         table_frame.grid(row=2, column=0, sticky="nsew")
         table_frame.columnconfigure(0, weight=1)
@@ -66,11 +69,13 @@ class SetupWizard:
         horizontal = ttk.Scrollbar(table_frame, orient="horizontal", command=self.devices.xview)
         horizontal.grid(row=1, column=0, sticky="ew")
         self.devices.configure(yscrollcommand=scrollbar.set, xscrollcommand=horizontal.set)
-        self.devices.tag_configure("alternate", background="#F7FAFA")
+        self.devices.tag_configure("alternate", background=BG)
         self.devices.bind("<<TreeviewSelect>>", self._select)
         self.status_var = tk.StringVar(value=t("블루투스 동글 검색 중…"))
         ttk.Label(frm, textvariable=self.status_var, wraplength=830, justify="left", font=(font_family(), 10, "bold")).grid(row=3, column=0, sticky="w", pady=(15, 12))
-        self.detail = tk.Text(frm, height=4, width=80, state="disabled", wrap="word", bg="#FFFFFF", fg="#53697A", relief="flat", padx=11, pady=9, font=(font_family(), 9))
+        self.detail = tk.Text(frm, height=4, width=80, state="disabled", wrap="word", bg="#FFFFFF", fg=MUTED,
+                              relief="flat", highlightthickness=1, highlightbackground=LINE,
+                              padx=11, pady=9, font=(font_family(), 9))
         self.detail.grid(row=4, column=0, sticky="ew", pady=(0, 15))
         actions = ttk.Frame(frm)
         actions.grid(row=5, column=0, sticky="ew")

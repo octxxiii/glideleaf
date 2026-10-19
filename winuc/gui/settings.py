@@ -11,7 +11,7 @@ from copy import deepcopy
 from typing import Callable
 
 from ..config import Config
-from .theme import configure, font_family
+from .theme import BG, MUTED, configure, font_family
 from .icons import apply_window_icon
 from .layout_diagram import clamp_center, draw_layout, layout_from_point
 
@@ -49,8 +49,9 @@ class SettingsWindow:
 
         self.vars: dict[str, tk.Variable] = {}
         nb = ttk.Notebook(self.win)
-        ttk.Label(self.win, text=t("나에게 맞는 입력 공유"), font=(font_family(), 16, "bold"), padding=(22, 20, 22, 6)).grid(row=0, column=0, sticky="w")
-        ttk.Label(self.win, text=t("저장하면 연결을 다시 시작해 설정을 적용합니다."), wraplength=620, padding=(22, 0, 22, 14)).grid(row=1, column=0, sticky="w")
+        ttk.Label(self.win, text=t("나에게 맞는 입력 공유"), font=(font_family(), 18, "bold"), padding=(22, 16, 22, 4)).grid(row=0, column=0, sticky="w")
+        ttk.Label(self.win, text=t("저장하면 연결을 다시 시작해 설정을 적용합니다."), foreground=MUTED,
+                  wraplength=620, padding=(22, 0, 22, 12)).grid(row=1, column=0, sticky="w")
         language_bar = ttk.Frame(self.win, padding=(22, 0, 22, 8))
         language_bar.grid(row=2, column=0, sticky="ew")
         ttk.Label(language_bar, text=t("언어")).pack(side="left", padx=(0, 12))
@@ -85,7 +86,7 @@ class SettingsWindow:
         self._row(f, 1, t("iPad 위치"), ttk.Combobox(
             f, textvariable=self.vars["edge"], values=list(self._edge_labels.values()), state="readonly", width=14))
         self.layout_canvas = tk.Canvas(f, width=540, height=self._layout_canvas_height,
-                                       bg="#F4F7F8", highlightthickness=0, cursor="hand2")
+                                       bg=BG, highlightthickness=0, cursor="hand2")
         self.layout_canvas.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(8, 11))
         self.layout_canvas.bind("<Configure>", lambda _event: self._render_layout())
         self.layout_canvas.bind("<ButtonPress-1>", self._start_layout_drag)

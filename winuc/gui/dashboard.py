@@ -46,19 +46,18 @@ class Dashboard:
         header = ttk.Frame(body)
         header.pack(fill="x")
         from PIL import ImageTk
-        self.brand_icon = ImageTk.PhotoImage(make_icon(None, 48), master=self.win)
-        ttk.Label(header, image=self.brand_icon).pack(side="left", padx=(0, 11))
-        ttk.Label(header, text="Glideleaf", font=("Segoe UI", 25, "bold")).pack(side="left")
-        ttk.Label(header, text="PC → iPad   /   INPUT SHARING", foreground=MUTED, font=("Segoe UI", 9)).pack(side="right")
+        self.brand_icon = ImageTk.PhotoImage(make_icon(None, 40), master=self.win)
+        ttk.Label(header, image=self.brand_icon).pack(side="left", padx=(0, 10))
+        ttk.Label(header, text="Glideleaf", font=(font_family(), 22, "bold")).pack(side="left")
         ttk.Label(body, text=t("익숙한 마우스와 키보드, iPad에서도 그대로."), foreground=MUTED, wraplength=650, padding=(0, 2, 0, 10)).pack(anchor="w")
         card = tk.Frame(body, bg="white", padx=18, pady=12, highlightbackground=LINE, highlightthickness=1)
         card.pack(fill="x", pady=(0, 2))
         self.card = card
-        self.badge = tk.Label(card, text="●", bg="white", fg=BLUE, font=("Segoe UI", 14))
+        self.badge = tk.Label(card, text="●  Bluetooth LE", bg="white", fg=BLUE, font=(font_family(), 9, "bold"))
         self.badge.pack(anchor="w")
         self.title = tk.StringVar()
         self.hint = tk.StringVar()
-        tk.Label(card, textvariable=self.title, bg="white", fg=INK, wraplength=580, justify="left", font=(font_family(), 18, "bold")).pack(anchor="w", pady=(4, 6))
+        tk.Label(card, textvariable=self.title, bg="white", fg=INK, wraplength=580, justify="left", font=(font_family(), 17, "bold")).pack(anchor="w", pady=(6, 5))
         tk.Label(card, textvariable=self.hint, bg="white", fg=MUTED, wraplength=580, justify="left", font=(font_family(), 10)).pack(anchor="w")
         self.toggle = ttk.Button(card, command=self.toggle_service, style="Primary.TButton")
         self.toggle.pack(anchor="w", pady=(10, 0))
@@ -82,15 +81,13 @@ class Dashboard:
             self.quickstart.pack(anchor="w")
         self.footer = ttk.Frame(body)
         self.footer.pack(fill="x", pady=(10, 0))
-        self.log_toggle = tk.Button(self.footer, text=t("진단 로그 펼치기"), command=self.toggle_logs,
-                                    bg="#FFFFFF", fg=INK, activebackground="#EAF3F0", activeforeground=INK,
-                                    relief="flat", padx=14, pady=9, font=(font_family(), 10))
+        self.log_toggle = ttk.Button(self.footer, text=t("진단 로그 펼치기"), command=self.toggle_logs)
         self.log_toggle.pack(side="left")
-        tk.Button(self.footer, text=t("오픈소스 정보"), command=self.show_about,
-                  bg="#FFFFFF", fg=INK, activebackground="#EAF3F0", activeforeground=INK,
-                  relief="flat", padx=14, pady=9, font=(font_family(), 10)).pack(side="right")
+        ttk.Button(self.footer, text=t("오픈소스 정보"), command=self.show_about).pack(side="right")
         self.logs = ttk.Frame(body)
-        self.log = tk.Text(self.logs, height=2, wrap="word", state="disabled", bg="#E9EDF5", fg=INK, relief="flat", font=("Consolas", 9), padx=10, pady=8)
+        self.log = tk.Text(self.logs, height=2, wrap="word", state="disabled", bg="#FFFFFF", fg=INK,
+                           relief="flat", highlightthickness=1, highlightbackground=LINE,
+                           font=("Consolas", 9), padx=10, pady=8)
         self.log.pack(fill="both", expand=True)
         ttk.Button(self.logs, text=t("전체 로그 열기"), command=self.open_log).pack(anchor="e", pady=4)
         self.refresh()
@@ -154,7 +151,7 @@ class Dashboard:
         self.hint.set(t(hint))
         color = "#16845B" if service.status == "ready" else "#C24236" if service.status == "error" else BLUE
         self.badge.configure(fg=color, text="●  " + "Bluetooth LE")
-        self.card.configure(highlightbackground=color if service.status in ("ready", "error") else LINE)
+        self.card.configure(highlightbackground=LINE)
         self.draw_devices()
         self.device.set(t("Bluetooth  ·  {name}\n화면 위치  ·  {edge}\nWindows 긴급 복귀  ·  {hotkey}", name=config.device_name, edge=t(EDGES[config.edge]), hotkey=config.release_hotkey.upper()))
         self.toggle.configure(text=t("연결 중지") if service.running else t("연결 시작"))

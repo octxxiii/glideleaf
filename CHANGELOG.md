@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Setup now lists adapters and lets users explicitly select and apply one.
+  Physical identity and a VID/PID-specific transport are persisted; row selection
+  does not apply settings or switch drivers. Existing choices survive reordered scans.
+- Connection startup validates the saved device before opening USB. Missing or
+  ambiguous selections never fall back to another radio. Same-VID/PID devices
+  remain visible as separate rows but require unplugging duplicates before use.
+- Driver operations release the service first and act on the selected row.
+  Apply/save failure preserves the previous configuration and connection.
+
 - USB enumeration now uses explicit UTF-8 and actual driver service/HCI IDs,
   with a CIM query and a PnP fallback. Scan failures are surfaced separately
   from an empty result; generic USBDevice nodes no longer imply WinUSB.

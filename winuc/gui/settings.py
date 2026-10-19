@@ -186,6 +186,8 @@ class SettingsWindow:
         c.drag_scroll_invert = bool(self.vars["drag_scroll_invert"].get())
         c.device_name = self.vars["device_name"].get().strip() or "Windows Pointer & Keyboard"
         c.transport = self.vars["transport"].get().strip()
+        if c.transport != self.config.transport:
+            c.adapter_id = ""  # An explicit manual transport overrides the saved picker.
         c.address = self.vars["address"].get().strip()
 
         c.validate()

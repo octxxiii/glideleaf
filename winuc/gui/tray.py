@@ -20,6 +20,7 @@ from typing import Callable
 import pystray
 
 from .. import autostart
+from .. import driver
 from ..config import Config
 from ..paths import config_path
 from ..service import (
@@ -126,10 +127,18 @@ class TrayApp:
 
     # ------------------------------------------------------------ actions
 
+    def _has_adapter_choice(self) -> bool:
+        # Preserve explicit legacy/manual transports, but never auto-open the
+        # default USB index before a new GUI user has applied an adapter.
+        return bool(self.config.adapter_id) or self.config.transport != Config().transport
+
     def _toggle_running(self, _icon=None, _item=None) -> None:
         if self.service.running:
             self.service.stop()
         else:
+            if not self._has_adapter_choice():
+                self._open_wizard()
+                return
             self.service.start(self.config)
         self._on_main(self._refresh_icon)
 
@@ -155,8 +164,54 @@ class TrayApp:
             if self._wizard is not None and self._wizard.win.winfo_exists():
                 self._wizard.win.lift()
             else:
-                self._wizard = SetupWizard(self.root)
+                self._wizard = self._make_wizard()
         self._on_main(show)
+
+    def _make_wizard(self) -> SetupWizard:
+        return SetupWizard(self.root, on_apply=self._apply_dongle,
+                           active_adapter_id=self.config.adapter_id,
+                           prepare_driver=self._prepare_adapter_driver)
+
+    def _apply_dongle(self, selected: driver.Dongle) -> None:
+        # Called by the wizard worker, never change Tk widgets here.
+        current = driver.resolve_selected_adapter(selected.identity)
+        previous = self.config
+        config = replace(previous, transport=current.transport, adapter_id=current.identity)
+        if config == previous:
+            return
+        was_running = self.service.running
+        if was_running:
+            self.service.stop()
+            if self.service.running:
+                raise RuntimeError(t("서비스 종료를 기다리고 있습니다. 잠시 후 다시 시도해 주세요."))
+        try:
+            config.save(self.config_file)
+        except Exception:
+            if was_running:
+                self.service.start(previous)
+            raise
+        self.config = config
+        if was_running and current.is_winusb:
+            self.service.start(config)
+        self._on_main(self._refresh_icon)
+        self._on_main(self._sync_settings_adapter)
+
+    def _sync_settings_adapter(self) -> None:
+        settings = getattr(self, "_settings_win", None)
+        if settings is not None and settings.win.winfo_exists():
+            settings.config = self.config
+            settings.vars["transport"].set(self.config.transport)
+        wizard = getattr(self, "_wizard", None)
+        if wizard is not None and wizard.win.winfo_exists():
+            wizard.set_active_adapter(self.config.adapter_id)
+
+    def _prepare_adapter_driver(self, selected: driver.Dongle) -> None:
+        driver.resolve_selected_adapter(selected.identity)
+        if self.service.running:
+            self.service.stop()
+            if self.service.running:
+                raise RuntimeError(t("서비스 종료를 기다리고 있습니다. 잠시 후 다시 시도해 주세요."))
+        self._on_main(self._refresh_icon)
 
     def _apply_config(self, config: Config) -> None:
         config.save(self.config_file)
@@ -166,9 +221,13 @@ class TrayApp:
         set_language(config.language)
         if self.service.running and replace(previous, language=config.language) != config:
             # Restart the link so new settings take effect immediately.
-            self.service.restart(config)
+            if self._has_adapter_choice():
+                self.service.restart(config)
+            else:
+                self.service.stop()
         if language_changed:
             self.root.after_idle(self._refresh_language)
+        self._sync_settings_adapter()
         self._refresh_icon()
 
     def _refresh_language(self) -> None:
@@ -187,7 +246,7 @@ class TrayApp:
             self.root.after(100, self._refresh_wizard_language)
             return
         wizard._close()
-        self._wizard = SetupWizard(self.root)
+        self._wizard = self._make_wizard()
 
     def _toggle_autostart(self, _icon=None, _item=None) -> None:
         autostart.set_enabled(not autostart.is_enabled())
@@ -222,8 +281,11 @@ class TrayApp:
         if first_run:
             self._open_wizard()
         elif autostart_service:
-            self.service.start(self.config)
-            self._refresh_icon()
+            if self._has_adapter_choice():
+                self.service.start(self.config)
+                self._refresh_icon()
+            else:
+                self._open_wizard()
         try:
             self.root.mainloop()
         finally:

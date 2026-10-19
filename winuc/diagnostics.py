@@ -11,14 +11,14 @@ from . import driver
 
 def build_report(devices: list[dict], error: str | None = None) -> dict:
     adapters = driver.list_dongles(devices=devices)
-    candidates = {item.vidpid: item for item in adapters}
     usb = []
     for entry in devices:
         match = driver._VIDPID_RE.match(entry.get("InstanceId") or "")
         if not match:
             continue
         key = (int(match.group(1), 16), int(match.group(2), 16))
-        candidate = candidates.get(key)
+        individual = driver.list_dongles(devices=[entry])
+        candidate = individual[0] if individual else None
         usb.append({
             "usb_id": f"{key[0]:04X}:{key[1]:04X}",
             # Keep interface identity, omit the trailing device serial/instance.
@@ -26,6 +26,7 @@ def build_report(devices: list[dict], error: str | None = None) -> dict:
             "name": entry.get("FriendlyName") or "",
             "class": entry.get("Class") or "",
             "service": entry.get("Service") or "",
+            "usb_location": entry.get("Location") or "",
             "status": entry.get("Status") or "",
             "problem_code": entry.get("ProblemCode"),
             "compatible_ids": entry.get("CompatibleIds") or [],

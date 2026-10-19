@@ -12,6 +12,10 @@ Before recommending a device combination, record the exact commit, Windows
 version, iPad model/iPadOS, chipset, VID/PID and firmware source, then verify:
 
 - WinUSB switch and restoration on the intended adapter; unrelated adapters remain intact.
+- Pick a non-first adapter, apply it, restart the app, and verify the same physical
+  device remains selected even if enumeration order changes. Unplug it and verify
+  the app refuses to open another radio. Same-VID/PID selections are currently
+  blocked until only one remains connected.
 - Initial pairing and reconnection after app restart.
 - Continuous mouse movement, clicks, scrolling and keyboard/media input.
 - Entry at each configured edge, push-back return, and Ctrl+Alt+Q recovery.

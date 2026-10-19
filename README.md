@@ -54,9 +54,31 @@ The original `python -m winuc` entry point is retained for compatibility. `pytho
 
 ### Set up the adapter
 
-The setup window detects a USB Bluetooth adapter. Automatic WinUSB switching requires the optional `wdi-simple.exe` tool. It is **not included** in this source repository. Prefer a verified build from [libwdi](https://github.com/pbatard/libwdi); `scripts/fetch_wdi.ps1` downloads an unofficial community binary and is an explicit opt-in.
+The setup window lists detected Bluetooth adapters with their USB ID, driver,
+USB location and applied status. **Select a row, then click Apply selected
+adapter.** Clicking a row only previews the device; applying saves the specific
+adapter and its VID/PID transport. Reopening setup restores that choice.
+With the default unconfigured transport, the GUI opens this picker instead of
+automatically connecting to USB index 0. Explicit legacy/manual transports remain supported.
+
+If the selected adapter still uses Windows Bluetooth, use **Switch to WinUSB**
+as a separate step. Applying a selection never changes drivers. A running
+connection is moved to the applied adapter only if it is WinUSB-ready; otherwise
+it stops until setup is completed. Missing or ambiguous saved selections fail
+explicitly rather than opening the first available adapter.
+
+![Glideleaf adapter list with separate selection, apply and driver controls](docs/images/adapter-picker-en.png)
+
+*Actual desktop UI with two simulated adapters; not physical-device qualification.*
+
+Automatic WinUSB switching requires the optional `wdi-simple.exe` tool. It is **not included** in this source repository. Prefer a verified build from [libwdi](https://github.com/pbatard/libwdi); `scripts/fetch_wdi.ps1` downloads an unofficial community binary and is an explicit opt-in.
 
 Alternatively, run `scripts/setup_dongle.ps1` and follow its Zadig instructions. The setup GUI reports an error if the automatic tool is missing; it does not silently install it. Restore the selected adapter through **Adapter setup / restore** before uninstalling. Do not switch an adapter that you rely on for your only keyboard or mouse.
+
+Multiple adapters with the same USB VID/PID are shown separately, but the current
+transport/driver operations cannot safely distinguish them. Keep just the one
+you want connected before applying or changing its driver. Moving a non-serial
+adapter to another USB port can require applying it again.
 
 ### Pair and use
 

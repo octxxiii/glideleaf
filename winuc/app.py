@@ -108,6 +108,10 @@ class UniversalControlApp:
             return
         enable_dpi_awareness()
 
+        if self.config.adapter_id:
+            from .driver import require_selected_adapter
+            await asyncio.to_thread(require_selected_adapter, self.config.adapter_id, self.config.transport)
+
         async with await open_transport(self.config.transport) as hci_transport:
             device = Device.from_config_with_hci(
                 self.peripheral.make_device_configuration(),

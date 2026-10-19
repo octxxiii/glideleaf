@@ -3,6 +3,7 @@
   "manufacturer_name": "Glideleaf",
   "language": "auto",
   "transport": "usb:[driver=rtk]0",
+  "adapter_id": "",
   "address": "F0:F1:F2:AA:BB:CC",
   "pnp": {
     "vendor_id_source": 2,

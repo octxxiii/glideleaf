@@ -29,6 +29,7 @@ class Config:
     manufacturer_name: str = "Glideleaf"
     # bumble transport specifier. [driver=rtk] forces the Realtek FW loader.
     transport: str = "usb:[driver=rtk]0"
+    adapter_id: str = ""  # Saved physical selection, empty for legacy/manual transports.
     # Static random address (top 2 bits must be 11)
     address: str = "F0:F1:F2:AA:BB:CC"
     pnp: PnpId = field(default_factory=PnpId)
@@ -62,6 +63,8 @@ class Config:
         from .i18n import LANGUAGES
         if self.language not in LANGUAGES:
             raise ValueError(t("지원하지 않는 언어입니다."))
+        if not isinstance(self.adapter_id, str):
+            raise ValueError(t("동글 선택과 연결 설정이 일치하지 않습니다. 동글을 다시 적용해 주세요."))
         if self.edge not in ("right", "left", "top", "bottom"):
             raise ValueError(t("iPad 방향을 선택해 주세요."))
         if not isinstance(self.speed, (int, float)) or not math.isfinite(self.speed) or not 0.2 <= self.speed <= 5:

@@ -98,6 +98,24 @@ def main(language="ko"):
         wizard.refresh()
         wizard._close()
         settle(root)
+    samples = [
+        {"InstanceId": r"USB\VID_8087&PID_0026\example-1", "FriendlyName": "Intel Bluetooth (example)", "Class": "Bluetooth", "Service": "BTHUSB", "Location": "Port_#0014.Hub_#0001"},
+        {"InstanceId": r"USB\VID_0BDA&PID_8771\example-2", "FriendlyName": "Realtek (example)", "Class": "USBDevice", "Service": "WinUSB", "Location": "Port_#0002.Hub_#0001"},
+    ]
+    applied = []
+    with patch("winuc.gui.setup_wizard.driver._pnp_query", return_value=samples):
+        wizard = SetupWizard(root, on_apply=applied.append)
+        settle(root)
+        assert len(wizard.devices.get_children()) == 2 and wizard._dongle is None
+        wizard.devices.selection_set("1")
+        settle(root)
+        assert not applied
+        wizard.apply_btn.invoke()
+        settle(root)
+        assert len(applied) == 1 and applied[0].vidpid == (0x0BDA, 0x8771)
+        capture(wizard.win, f"adapter-picker-{language}.png")
+        wizard._close()
+        settle(root)
     root.destroy()
     assert not errors, errors
     print(f"PASS {language}: six states, footer layout, credits, log toggle, validation, localized settings roundtrip, async wizard close")

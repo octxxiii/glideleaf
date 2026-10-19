@@ -78,7 +78,7 @@ def test_language_change_keeps_ble_connected(tmp_path):
     from winuc.gui.tray import TrayApp
     app = TrayApp.__new__(TrayApp)
     app.config_file = tmp_path / "config.json"
-    app.config = Config(language="ko")
+    app.config = Config(language="ko", transport="usb:1234:5678")
     app.root = SimpleNamespace(after_idle=Mock())
     app.service = SimpleNamespace(running=True, restart=Mock())
     app._refresh_icon = Mock()
@@ -92,12 +92,11 @@ def test_language_change_keeps_ble_connected(tmp_path):
 
 
 @pytest.mark.skipif(__import__("sys").platform != "win32", reason="Windows desktop UI")
-def test_live_language_switch_rebuilds_dashboard_and_tray(tmp_path):
+def test_live_language_switch_rebuilds_dashboard_and_tray(tmp_path, desktop_root):
     import tkinter as tk
     from winuc.gui.dashboard import Dashboard
     from winuc.gui.tray import TrayApp
-    root = tk.Tk()
-    root.withdraw()
+    root = desktop_root
     app = TrayApp.__new__(TrayApp)
     app.root = root
     app.config = Config(language="ko")
@@ -118,4 +117,3 @@ def test_live_language_switch_rebuilds_dashboard_and_tray(tmp_path):
         app.service.restart.assert_not_called()
     finally:
         app._dashboard.close()
-        root.destroy()

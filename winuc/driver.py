@@ -44,6 +44,8 @@ class Dongle:
     instance_id: str
     friendly_name: str
     driver: str  # "winusb" | "inbox" | "unknown"
+    container_id: str = ""
+    location: str = ""
 
     @property
     def vidpid(self) -> tuple[int, int]:
@@ -56,6 +58,18 @@ class Dongle:
     @property
     def is_winusb(self) -> bool:
         return self.driver == "winusb"
+
+    @property
+    def identity(self) -> str:
+        """Persist the physical selection independently of the driver name."""
+        return f"{self.vid:04x}:{self.pid:04x}/{self.container_id or self.instance_id}".casefold()
+
+    @property
+    def transport(self) -> str:
+        # Preserve the upstream firmware-loader override for its Realtek IDs.
+        realtek = self.vidpid in ((0x0411, 0x0374), (0x0BDA, 0x8771), (0x0BDA, 0xC820))
+        prefix = "[driver=rtk]" if realtek else ""
+        return f"usb:{prefix}{self.vid:04x}:{self.pid:04x}"
 
 
 def is_admin() -> bool:
@@ -121,6 +135,24 @@ try {
             }
         })
 }
+# Optional physical grouping and port labels. A single batch avoids querying
+# PnP properties once for every USB node; CIM remains usable without this module.
+if ($devices.Count -gt 0) {
+    try {
+        $properties = @(Get-PnpDeviceProperty -InstanceId @($devices.InstanceId) -KeyName DEVPKEY_Device_ContainerId,DEVPKEY_Device_LocationInfo -ErrorAction Stop)
+        $metadata = @{}
+        foreach ($property in $properties) {
+            if (-not $metadata.ContainsKey($property.InstanceId)) { $metadata[$property.InstanceId] = @{} }
+            $metadata[$property.InstanceId][$property.KeyName] = $property.Data
+        }
+        foreach ($device in $devices) {
+            if ($metadata.ContainsKey($device.InstanceId)) {
+                $device | Add-Member -NotePropertyName ContainerId -NotePropertyValue ([string]$metadata[$device.InstanceId]['DEVPKEY_Device_ContainerId'])
+                $device | Add-Member -NotePropertyName Location -NotePropertyValue ([string]$metadata[$device.InstanceId]['DEVPKEY_Device_LocationInfo'])
+            }
+        }
+    } catch { } # Optional identity metadata must not hide a successful scan.
+}
 ConvertTo-Json -InputObject @($devices) -Compress -Depth 4
 """
 
@@ -168,12 +200,13 @@ _VIDPID_RE = re.compile(r"USB\\VID_([0-9A-Fa-f]{4})&PID_([0-9A-Fa-f]{4})", re.IG
 def list_dongles(known_only: bool = False, *, devices: list[dict] | None = None) -> list[Dongle]:
     """Enumerate present USB Bluetooth dongles and their current driver binding.
 
-    Deduplicated by VID/PID (composite devices enumerate one node per
-    interface). Only known dongles, Bluetooth-class devices, and WinUSB-bound
+    Composite interfaces are grouped by physical container when available;
+    distinct adapters with the same VID/PID remain separate. Only known
+    dongles, Bluetooth-class devices, and WinUSB-bound
     devices with Bluetooth HCI evidence are reported -- unrelated USB gear
     (including generic WinUSB devices and HID receivers) is skipped.
     """
-    by_vidpid: dict[tuple[int, int], Dongle] = {}
+    by_identity: dict[str, Dongle] = {}
     for entry in _pnp_query() if devices is None else devices:
         instance_id = entry.get("InstanceId") or ""
         match = _VIDPID_RE.match(instance_id)
@@ -186,7 +219,7 @@ def list_dongles(known_only: bool = False, *, devices: list[dict] | None = None)
         is_known = (vid, pid) in KNOWN_DONGLES
         looks_bluetooth = cls == "bluetooth" or "bluetooth" in name.lower()
         service = (entry.get("Service") or "").lower()
-        if cls == "hidclass" or service == "hidusb":
+        if cls == "hidclass" or service in ("hidusb", "usbccgp"):
             continue  # A keyboard/mouse receiver is not a USB Bluetooth radio.
         compatible_ids = entry.get("CompatibleIds") or []
         if isinstance(compatible_ids, str):
@@ -203,11 +236,39 @@ def list_dongles(known_only: bool = False, *, devices: list[dict] | None = None)
 
         driver = "winusb" if is_winusb else "inbox" if cls == "bluetooth" or service == "bthusb" else "unknown"
         # A WinUSB-bound known dongle has no meaningful Class name; trust the
-        # known list for its label. Prefer the most informative record per VID/PID.
-        existing = by_vidpid.get((vid, pid))
-        if existing is None or (existing.driver == "unknown" and driver != "unknown"):
-            by_vidpid[(vid, pid)] = Dongle(vid, pid, instance_id, name, driver)
-    return list(by_vidpid.values())
+        # known list for its label. Prefer the active binding per physical group.
+        container_id = str(entry.get("ContainerId") or "").casefold()
+        if container_id.strip("{}0-") == "":
+            container_id = ""
+        dongle = Dongle(vid, pid, instance_id, name, driver, container_id, str(entry.get("Location") or ""))
+        existing = by_identity.get(dongle.identity)
+        rank = {"unknown": 0, "inbox": 1, "winusb": 2}
+        if existing is None or rank[driver] > rank[existing.driver]:
+            by_identity[dongle.identity] = dongle
+    return list(by_identity.values())
+
+
+def resolve_selected_adapter(identity: str) -> Dongle:
+    """Resolve the exact choice and reject ambiguous VID/PID-only USB opens."""
+    from .i18n import t
+    dongles = list_dongles()
+    chosen = next((device for device in dongles if device.identity == identity), None)
+    if chosen is None:
+        raise RuntimeError(t("적용한 동글을 찾지 못했습니다. 다시 연결하거나 목록에서 다른 동글을 적용해 주세요."))
+    if sum(device.vidpid == chosen.vidpid for device in dongles) > 1:
+        raise RuntimeError(t("같은 USB ID의 동글이 여러 개입니다. 사용할 동글 하나만 연결한 뒤 다시 검색해 주세요."))
+    return chosen
+
+
+def require_selected_adapter(identity: str, transport: str) -> Dongle:
+    """Fail before opening USB if the saved physical selection is unavailable."""
+    from .i18n import t
+    chosen = resolve_selected_adapter(identity)
+    if chosen.transport != transport:
+        raise RuntimeError(t("동글 선택과 연결 설정이 일치하지 않습니다. 동글을 다시 적용해 주세요."))
+    if not chosen.is_winusb:
+        raise RuntimeError(t("선택한 동글을 WinUSB로 전환한 뒤 연결을 시작해 주세요."))
+    return chosen
 
 
 def find_dongle(vid: int | None = None, pid: int | None = None) -> Dongle | None:

@@ -85,12 +85,11 @@ def test_diagnostics_run_even_when_saved_configuration_is_broken(tmp_path, monke
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Windows desktop UI")
-def test_setup_scan_failure_keeps_copyable_error_report(monkeypatch):
+def test_setup_scan_failure_keeps_copyable_error_report(monkeypatch, desktop_root):
     import tkinter as tk
     from winuc.gui.setup_wizard import SetupWizard
     from winuc.i18n import t
-    root = tk.Tk()
-    root.withdraw()
+    root = desktop_root
     monkeypatch.setattr(driver, "_pnp_query", Mock(side_effect=driver.DongleDetectionError("query failed")))
     wizard = SetupWizard(root)
     try:
@@ -101,4 +100,3 @@ def test_setup_scan_failure_keeps_copyable_error_report(monkeypatch):
         assert str(wizard.copy_btn["state"]) == "normal"
     finally:
         wizard._close()
-        root.destroy()

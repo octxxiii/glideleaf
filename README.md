@@ -71,20 +71,23 @@ explicitly rather than opening the first available adapter.
 
 *Actual desktop UI with two simulated adapters; not physical-device qualification.*
 
-Confirm **Switch to WinUSB** to prepare the installer automatically, then approve
-the Windows administrator prompt. No separate Zadig download is required.
-If no local installer was supplied, Glideleaf downloads the pinned
-[Timocop/libwdi community build v1.0](https://github.com/Timocop/libwdi-wdi-releases/releases/tag/v1.0),
-checks SHA-256 for both the archive and executable, and caches it under
-`%LOCALAPPDATA%\WinUC\tools`. Cached downloads are checked again before use.
-Download or verification failure stops setup before UAC; retry the same button.
-The automatic download supports x64 and x86 Windows; ARM64 is not qualified.
-See [driver-tool provenance](docs/DRIVER_TOOL.md). The optional developer command
-`scripts/fetch_wdi.ps1` only prepares this same verified tool, without installing a driver.
+Confirm **Switch to WinUSB** to download and verify the **official signed
+Zadig 2.9** installer. Glideleaf checks both SHA-256 and the Windows Authenticode
+signature of **Akeo Consulting**, including before cached tools are launched.
+No separate browser download is required. The earlier unsigned community CLI
+is no longer used by this GUI flow.
 
-Manual Zadig setup remains an alternative via `scripts/setup_dongle.ps1`.
-Restore the selected adapter through **Adapter setup / restore** before uninstalling.
-Do not switch an adapter that you rely on for your only keyboard or mouse.
+In the official Zadig window, **select the adapter with the USB ID shown by
+Glideleaf, choose WinUSB and confirm installation**. Administrator approval is
+required. Glideleaf verifies the actual WinUSB binding after Zadig closes;
+closing the window alone does not count as success. This is automatic tool
+preparation with an explicit final device/install confirmation, not unattended
+installation. See [installer provenance and verification](docs/DRIVER_TOOL.md).
+
+Security blocks stop setup; the app does not change antivirus settings or add
+exclusions. Official signing does not guarantee acceptance by every policy.
+Restore the selected adapter through **Adapter setup / restore** before
+uninstalling. Do not switch an adapter used by your only keyboard or mouse.
 
 Multiple adapters with the same USB VID/PID are shown separately, but the current
 transport/driver operations cannot safely distinguish them. Keep just the one

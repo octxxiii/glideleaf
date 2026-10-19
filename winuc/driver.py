@@ -3,11 +3,10 @@
 WinUC drives the dongle in user space (via bumble/libusb), which requires the
 dongle to be bound to the WinUSB driver instead of the in-box Bluetooth stack.
 
-A Bluetooth radio is already claimed by a higher-ranked in-box driver, so
-`pnputil /add-driver /install` will not force WinUSB onto it. The reliable way
-to force-rebind is libwdi (the engine behind Zadig); we ship its scriptable
-CLI, `wdi-simple.exe`, and shell out to it. Restoring the in-box driver is done
-with `pnputil`.
+The GUI prepares the official signed Zadig installer and asks the user to
+confirm the device and installation there. A legacy explicit wdi-simple helper
+remains for callers supplying their own build; the GUI never uses it.
+Restoring the in-box driver is done with pnputil.
 
 All install/restore operations require Administrator. The GUI calls the
 `*_elevated` helpers, which re-launch this module's CLI verbs elevated (one UAC
@@ -92,8 +91,7 @@ def wdi_simple_path() -> Path | None:
     for path in candidates:
         if path.is_file():
             return path
-    from .driver_tool import cached_tool
-    return cached_tool()
+    return None
 
 
 # --------------------------------------------------------------- detection
@@ -359,11 +357,15 @@ def restore_inbox(vid: int, pid: int) -> None:
 
 # ------------------------------------------------------------- elevation
 
-def _relaunch_elevated(args: list[str], wait: bool = True) -> int:
+def _relaunch_elevated(args: list[str], wait: bool = True, *, executable: Path | None = None,
+                       directory: Path | None = None, visible: bool = False) -> int:
     """Re-launch this program's driver CLI with the given args, elevated."""
     import ctypes.wintypes as wt
 
-    if getattr(sys, "frozen", False):
+    if executable is not None:
+        exe = str(executable)
+        params = subprocess.list2cmdline(args)
+    elif getattr(sys, "frozen", False):
         exe = sys.executable
         params = subprocess.list2cmdline(args)
     else:
@@ -399,9 +401,9 @@ def _relaunch_elevated(args: list[str], wait: bool = True) -> int:
     info.lpParameters = params
     # UAC may start a source checkout in System32, where `-m winuc` cannot
     # resolve our package. Use the package root explicitly.
-    info.lpDirectory = str(Path(sys.executable).resolve().parent if getattr(sys, "frozen", False)
-                           else Path(__file__).resolve().parent.parent)
-    info.nShow = 0  # SW_HIDE
+    info.lpDirectory = str(directory or (Path(sys.executable).resolve().parent if getattr(sys, "frozen", False)
+                           else Path(__file__).resolve().parent.parent))
+    info.nShow = 1 if visible else 0
     if not ctypes.windll.shell32.ShellExecuteExW(ctypes.byref(info)):
         raise OSError("elevation was cancelled or failed")
     if not wait or not info.hProcess:
@@ -414,19 +416,22 @@ def _relaunch_elevated(args: list[str], wait: bool = True) -> int:
 
 
 def install_winusb_elevated(vid: int, pid: int, name: str = "Glideleaf Bluetooth") -> None:
-    # Prepare before UAC. The elevated child verifies the cached hash again.
-    if wdi_simple_path() is None:
-        from .driver_tool import ensure_tool
-        ensure_tool()
-    if is_admin():
-        install_winusb(vid, pid, name)
-        return
-    code = _relaunch_elevated(
-        ["--driver-install", "--vid", f"0x{vid:04X}", "--pid", f"0x{pid:04X}"]
-    )
+    # Never use the unsigned community CLI, even if it remains cached/bundled.
+    # The official signed GUI requires the user to confirm the actual target.
+    from .driver_tool import ensure_tool
+    from .i18n import t
+    tool = ensure_tool()
+    (tool.parent / "zadig.ini").write_text(
+        "[device]\nlist_all = true\ninclude_hubs = false\n"
+        "[driver]\ndefault_driver = 0\n[general]\nexit_on_success = true\n",
+        encoding="utf-8")
+    code = _relaunch_elevated([], executable=tool, directory=tool.parent, visible=True)
     if code != 0:
-        from .paths import log_path
-        raise RuntimeError(f"elevated driver install failed (exit {code}). Details: {log_path()}")
+        raise RuntimeError(f"Official Zadig exited with error {code}. Driver installation was not confirmed.")
+    # Closing the official window is not proof that a driver was installed.
+    matches = [d for d in list_dongles() if d.vidpid == (vid, pid)]
+    if len(matches) != 1 or not matches[0].is_winusb:
+        raise RuntimeError(t("선택한 동글을 WinUSB로 전환한 뒤 연결을 시작해 주세요."))
 
 
 def restore_inbox_elevated(vid: int, pid: int) -> None:

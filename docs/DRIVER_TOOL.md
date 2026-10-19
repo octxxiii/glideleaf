@@ -1,42 +1,43 @@
-# Automatic WinUSB installer
+# Official WinUSB installer preparation
 
-The adapter wizard prepares `wdi-simple.exe` only after the user confirms
-Switch to WinUSB. Apply, discovery, diagnostics and ordinary startup never
-download or install a driver. Windows UAC remains required for the driver change.
+Glideleaf downloads **official Zadig 2.9**, not the unsigned community CLI used
+in an earlier development revision. Existing community caches are never used
+by the GUI installation path. No antivirus exclusions, security-policy changes,
+or unverified fallbacks are applied.
 
-The separate executable is an **unofficial community build** of libwdi:
+- Publisher: Akeo Consulting
+- Official page: https://zadig.akeo.ie/
+- Release: https://github.com/pbatard/libwdi/releases/tag/v1.5.1
+- Download: https://github.com/pbatard/libwdi/releases/download/v1.5.1/zadig-2.9.exe
+- SHA-256: `4ecaa95df3da3621486a043aef8b3050b8bafe7c901402871e816229ef82039b`
+- Corresponding source: https://github.com/pbatard/libwdi/tree/v1.5.1
+- Zadig: GPL-3.0-or-later; libwdi: LGPL-3.0-or-later.
+- License texts are preserved in `winuc/licenses` and copied beside the download.
 
-- Release: https://github.com/Timocop/libwdi-wdi-releases/releases/tag/v1.0
-- Source snapshot: https://github.com/Timocop/libwdi-wdi-releases/tree/v1.0
-- Upstream: https://github.com/pbatard/libwdi
-- License: LGPL-3.0-or-later; GPL/LGPL texts are in `winuc/licenses`.
+After confirming Switch to WinUSB, Glideleaf verifies both the pinned file hash
+and Windows Authenticode status `Valid` with signer `Akeo Consulting`. Cached
+files are signature-checked again before launch. Download and signature failure
+stop setup. Downloads are size-limited to 32 MiB and have a 60-second network
+inactivity timeout. Partial files are removed on failure.
 
-The release archives contain other programs too. Glideleaf extracts only
-`wdi-simple.exe`, without executing the archive or extracting archive paths.
-The executable is invoked as a separate process, with the selected VID/PID and
-WinUSB driver type. Driver output goes to the app's per-user data directory.
-An explicitly supplied local tool in the existing `tools` location remains
-available for users providing their own build.
+The official GUI opens visibly with its own administrator prompt. Glideleaf
+shows the selected adapter name and USB VID/PID before opening it. **The user
+must select that device, select WinUSB, and confirm installation in Zadig.**
+Zadig is configured to list devices, hide hubs, default to WinUSB and close after
+success. Glideleaf does not click controls or select the first device on the
+user's behalf. Closing Zadig is not treated as success: the selected VID/PID
+must be uniquely present and actually bound to WinUSB before success is shown.
 
-| Artifact | SHA-256 |
-| --- | --- |
-| x64.zip | d5aace13a3c1d5980113a5938fbee2edaa788ed625e3c554ff47da24cde39cda |
-| x64 wdi-simple.exe | 27b6d9847d874674b7c412af124acf64b0b1efa397e3bbea8eab9950a6a08ee0 |
-| x86.zip | ac37a6a24eb9e550135218e5af30669d6e8a3d78c5d36f9b4ab6c1f6232ef266 |
-| x86 wdi-simple.exe | da0e280cf66d7261ceb436ff48d45bbd6f5ab9b70180b487a41a2957f9723bf6 |
+Official Zadig is not a command-line drop-in replacement for wdi-simple.
+This flow automates tool preparation, not the final device selection/confirmation.
+The app's own executable remains unsigned; official tool signing is not a claim
+that every security policy will permit either program. A reported security
+block still requires its exact message/file/threat name to diagnose.
 
-These hashes pin the inspected release bytes; they do not establish a
-reproducible build or an official upstream signature. Updating the tool requires
-reviewing provenance and updating both hashes deliberately. There is no fallback
-to an unverified download.
+Read-only discovery, Apply and ordinary startup never download or install a
+driver. The cached tool lives under `%LOCALAPPDATA%\WinUC\tools\zadig-2.9`.
+For a developer-only prefetch, run `scripts/fetch_wdi.ps1` (legacy filename).
 
-Downloads are limited to 32 MiB, timeout after 60 seconds of network inactivity,
-and are verified before an atomic write under `%LOCALAPPDATA%\WinUC\tools`.
-The hash of a cached download is checked before reuse, including in the elevated
-child. Interrupted downloads leave no executable. Network failures can be
-retried from the wizard; errors after elevation point to
-`%LOCALAPPDATA%\WinUC\winuc.log`.
-
-Local validation covers download/cache/integrity/error handling and GUI behavior.
-Physical CSR/iPad pairing and driver installation remain unverified on the
-development PC.
+Local validation covers real download and Authenticode verification, isolated
+failure tests, GUI behavior and packaging. Physical driver installation and
+CSR/iPad pairing remain unverified on the development PC.

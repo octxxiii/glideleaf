@@ -33,14 +33,14 @@ Python과 Tcl/Tk 및 Pillow wheel 등에 포함된 네이티브 라이브러리 
 
 ## 선택 구성 요소
 
-- `wdi-simple.exe`: libwdi 기반 외부 도구. 실제 사용한 바이너리의 라이선스,
-  빌드 출처와 정확한 대응 소스 제공 조건을 확인하세요. LGPL/GPL 전문을 동봉하고,
-  비공식 다운로드 링크를 대응 소스 제공의 대체물로 간주하지 마세요.
-  https://github.com/pbatard/libwdi
-  GUI에서 WinUSB 전환에 동의하면 Timocop 커뮤니티 빌드 v1.0을 자동으로
-  내려받습니다. 배포 주소·대응 소스·파일 해시는 docs/DRIVER_TOOL.md에 기록합니다.
-  GPL/LGPL 전문은 winuc/licenses에 보존하며 다운로드한 도구 옆에도 복사합니다.
-  이 실행 파일은 Git 소스 저장소나 기본 앱 빌드에 직접 포함하지 않습니다.
+- 공식 Zadig 2.9: Akeo Consulting 서명, GPL-3.0-or-later. 포함된 libwdi는
+  LGPL-3.0-or-later입니다. 앱에서 전환 확인 후 공식 릴리스를 다운로드하며,
+  해시·서명 검증 후 공식 창을 열어 사용자가 장치와 설치를 확인합니다.
+  실행 파일을 Git 소스나 기본 빌드에 직접 포함하지 않습니다.
+  GPL/LGPL 전문은 winuc/licenses 및 다운로드한 도구 옆에 보존합니다.
+  정확한 다운로드·대응 소스·해시는 docs/DRIVER_TOOL.md를 확인하세요.
+  이전 개발판의 미서명 커뮤니티 CLI 캐시는 GUI 설치 경로에서 사용하지 않습니다.
+  https://github.com/pbatard/libwdi/tree/v1.5.1
 - Realtek 펌웨어: MIT 프로젝트 코드에 포함되지 않습니다. 실제 다운로드한 파일에
   적용되는 펌웨어 라이선스와 배포 조건을 확인하고 고지문을 함께 제공해야 합니다.
   https://gitlab.com/kernel-firmware/linux-firmware

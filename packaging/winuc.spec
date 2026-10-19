@@ -20,13 +20,10 @@ notices = ROOT / "build" / "licenses"
 if not (notices / "dependencies.json").is_file():
     raise RuntimeError("Run python scripts/collect_licenses.py before packaging")
 datas += [(str(notices), "licenses")]
-# Bundle Realtek firmware and the wdi-simple tool if present.
+# Optional firmware; external driver installers are downloaded and verified.
 fw = ROOT / "firmware"
 if fw.is_dir():
     datas += [(str(p), "firmware") for p in fw.glob("*.bin")]
-tools = ROOT / "tools"
-if tools.is_dir():
-    datas += [(str(p), "tools") for p in tools.iterdir() if p.is_file()]
 # libusb backend DLL shipped by libusb_package.
 datas += collect_data_files("libusb_package")
 

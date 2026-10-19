@@ -17,24 +17,26 @@ def test_download_failure_is_reported_before_uac(monkeypatch):
     elevate.assert_not_called()
 
 
-def test_missing_installer_is_prepared_before_uac(monkeypatch):
+def test_official_installer_is_prepared_before_uac(monkeypatch, tmp_path):
     from winuc import driver_tool
     order = []
     monkeypatch.setattr(driver, "wdi_simple_path", lambda: None)
     monkeypatch.setattr(driver, "is_admin", lambda: False)
-    monkeypatch.setattr(driver_tool, "ensure_tool", lambda: order.append("download"))
-    monkeypatch.setattr(driver, "_relaunch_elevated", lambda args: order.append("uac") or 0)
+    monkeypatch.setattr(driver_tool, "ensure_tool", lambda: order.append("download") or tmp_path / "zadig.exe")
+    monkeypatch.setattr(driver, "list_dongles", lambda: [driver.Dongle(0x0A12, 1, "csr", "CSR", "winusb")])
+    monkeypatch.setattr(driver, "_relaunch_elevated", lambda args, **kwargs: order.append("uac") or 0)
     driver.install_winusb_elevated(0x0A12, 1)
     assert order == ["download", "uac"]
 
 
-def test_elevated_failure_points_to_persistent_log(monkeypatch, tmp_path):
-    from winuc import paths
+def test_official_installer_failure_is_not_success(monkeypatch, tmp_path):
+    from winuc import paths, driver_tool
+    monkeypatch.setattr(driver_tool, "ensure_tool", lambda: tmp_path / "zadig.exe")
     monkeypatch.setattr(driver, "wdi_simple_path", lambda: tmp_path / "wdi-simple.exe")
     monkeypatch.setattr(driver, "is_admin", lambda: False)
-    monkeypatch.setattr(driver, "_relaunch_elevated", lambda args: 1)
+    monkeypatch.setattr(driver, "_relaunch_elevated", lambda args, **kwargs: 1)
     monkeypatch.setattr(paths, "log_path", lambda: tmp_path / "winuc.log")
-    with pytest.raises(RuntimeError, match="winuc.log"):
+    with pytest.raises(RuntimeError, match="Official Zadig exited with error 1"):
         driver.install_winusb_elevated(0x0A12, 1)
 
 
@@ -51,3 +53,12 @@ def test_windowless_driver_failure_is_logged(monkeypatch):
     assert cli.main() == 1
     assert setup.call_args.kwargs["to_file"] is True
     logger.exception.assert_called_once()
+
+
+def test_closing_official_window_is_not_install_success(monkeypatch, tmp_path):
+    from winuc import driver_tool
+    monkeypatch.setattr(driver_tool, "ensure_tool", lambda: tmp_path / "zadig.exe")
+    monkeypatch.setattr(driver, "_relaunch_elevated", lambda args, **kwargs: 0)
+    monkeypatch.setattr(driver, "list_dongles", lambda: [driver.Dongle(0x0A12, 1, "csr", "CSR", "inbox")])
+    with pytest.raises(RuntimeError):
+        driver.install_winusb_elevated(0x0A12, 1)

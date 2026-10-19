@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 
 from . import __version__
 from . import driver
+from .driver_tool import cached_tool
 
 
 def build_report(devices: list[dict], error: str | None = None) -> dict:
@@ -44,7 +45,7 @@ def build_report(devices: list[dict], error: str | None = None) -> dict:
         "enumeration_error": error,
         "usb_node_count": len(usb),
         "bluetooth_candidate_count": len(adapters),
-        "automatic_driver_tool_present": driver.wdi_simple_path() is not None,
+        "automatic_driver_tool_present": cached_tool() is not None,
         "usb_devices": usb,
         "scope": "Read-only enumeration. No radio opened, driver changed, pairing keys or input logs read. Device serial suffixes omitted.",
     }

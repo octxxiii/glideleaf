@@ -31,14 +31,17 @@ class Dashboard:
         self.win.title(t("Glideleaf · 연결 패널"))
         apply_window_icon(self.win)
         configure(app.root)
-        self.win.geometry("740x820")
-        self.win.minsize(700, 780)
+        self._width = min(740, max(640, self.win.winfo_screenwidth() - 48))
+        self._compact = self.win.winfo_screenheight() <= 800
+        self._height = min(700, max(560, self.win.winfo_screenheight() - 80))
+        self.win.geometry(f"{self._width}x{self._height}")
+        self.win.minsize(640, 560)
         self.win.configure(bg=BG)
         self._timer = None
         self._last_log = None
         self._busy = False
         self.win.protocol("WM_DELETE_WINDOW", self.close)
-        body = ttk.Frame(self.win, padding=28)
+        body = ttk.Frame(self.win, padding=18)
         body.pack(fill="both", expand=True)
         header = ttk.Frame(body)
         header.pack(fill="x")
@@ -47,8 +50,8 @@ class Dashboard:
         ttk.Label(header, image=self.brand_icon).pack(side="left", padx=(0, 11))
         ttk.Label(header, text="Glideleaf", font=("Segoe UI", 25, "bold")).pack(side="left")
         ttk.Label(header, text="PC → iPad   /   INPUT SHARING", foreground=MUTED, font=("Segoe UI", 9)).pack(side="right")
-        ttk.Label(body, text=t("익숙한 마우스와 키보드, iPad에서도 그대로."), foreground=MUTED, wraplength=650, padding=(0, 4, 0, 22)).pack(anchor="w")
-        card = tk.Frame(body, bg="white", padx=24, pady=20, highlightbackground=LINE, highlightthickness=1)
+        ttk.Label(body, text=t("익숙한 마우스와 키보드, iPad에서도 그대로."), foreground=MUTED, wraplength=650, padding=(0, 2, 0, 10)).pack(anchor="w")
+        card = tk.Frame(body, bg="white", padx=18, pady=12, highlightbackground=LINE, highlightthickness=1)
         card.pack(fill="x", pady=(0, 2))
         self.card = card
         self.badge = tk.Label(card, text="●", bg="white", fg=BLUE, font=("Segoe UI", 14))
@@ -58,31 +61,36 @@ class Dashboard:
         tk.Label(card, textvariable=self.title, bg="white", fg=INK, wraplength=580, justify="left", font=(font_family(), 18, "bold")).pack(anchor="w", pady=(4, 6))
         tk.Label(card, textvariable=self.hint, bg="white", fg=MUTED, wraplength=580, justify="left", font=(font_family(), 10)).pack(anchor="w")
         self.toggle = ttk.Button(card, command=self.toggle_service, style="Primary.TButton")
-        self.toggle.pack(anchor="w", pady=(18, 0))
+        self.toggle.pack(anchor="w", pady=(10, 0))
         self.error = tk.StringVar()
         self.error_label = tk.Label(body, textvariable=self.error, bg=BG, fg="#B42318", wraplength=620, justify="left")
-        self.diagram = tk.Canvas(body, height=116, bg=BG, highlightthickness=0)
-        self.diagram.pack(fill="x", pady=(16, 0))
+        self.diagram = tk.Canvas(body, height=96, bg=BG, highlightthickness=0)
+        self.diagram.pack(fill="x", pady=(8, 0))
         self.diagram.bind("<Configure>", lambda event: self.draw_devices())
         self.device = tk.StringVar()
-        ttk.Label(body, textvariable=self.device, foreground=MUTED, justify="left").pack(anchor="w", pady=(2, 12))
-        actions = ttk.Frame(body)
-        actions.pack(fill="x")
-        ttk.Button(actions, text=t("포인터 · 키보드 설정"), command=app._open_settings).pack(side="left")
-        ttk.Button(actions, text=t("동글 설정 / 복원"), command=app._open_wizard).pack(side="left", padx=8)
-        ttk.Label(body, text=t("시작하기"), font=(font_family(), 11, "bold")).pack(anchor="w", pady=(20, 6))
-        ttk.Label(body, text=t("① 전용 USB 동글 준비   →   ② iPad에서 Bluetooth 페어링\n③ 선택한 화면 가장자리를 밀어 제어 이동"), foreground=MUTED, wraplength=650, justify="left").pack(anchor="w")
-        footer = ttk.Frame(body)
-        footer.pack(fill="x", pady=(18, 0))
-        self.log_toggle = tk.Button(footer, text=t("진단 로그 펼치기"), command=self.toggle_logs,
+        self.device_label = ttk.Label(body, textvariable=self.device, foreground=MUTED, justify="left")
+        self.device_label.pack(anchor="w", pady=(2, 8))
+        self.actions = ttk.Frame(body)
+        self.actions.pack(fill="x")
+        ttk.Button(self.actions, text=t("포인터 · 키보드 설정"), command=app._open_settings).pack(side="left")
+        ttk.Button(self.actions, text=t("동글 설정 / 복원"), command=app._open_wizard).pack(side="left", padx=8)
+        self.quickstart_title = ttk.Label(body, text=t("시작하기"), font=(font_family(), 11, "bold"))
+        if not self._compact:
+            self.quickstart_title.pack(anchor="w", pady=(10, 4))
+        self.quickstart = ttk.Label(body, text=t("① 전용 USB 동글 준비   →   ② iPad에서 Bluetooth 페어링\n③ 선택한 화면 가장자리를 밀어 제어 이동"), foreground=MUTED, wraplength=650, justify="left")
+        if not self._compact:
+            self.quickstart.pack(anchor="w")
+        self.footer = ttk.Frame(body)
+        self.footer.pack(fill="x", pady=(10, 0))
+        self.log_toggle = tk.Button(self.footer, text=t("진단 로그 펼치기"), command=self.toggle_logs,
                                     bg="#FFFFFF", fg=INK, activebackground="#EAF3F0", activeforeground=INK,
                                     relief="flat", padx=14, pady=9, font=(font_family(), 10))
         self.log_toggle.pack(side="left")
-        tk.Button(footer, text=t("오픈소스 정보"), command=self.show_about,
+        tk.Button(self.footer, text=t("오픈소스 정보"), command=self.show_about,
                   bg="#FFFFFF", fg=INK, activebackground="#EAF3F0", activeforeground=INK,
                   relief="flat", padx=14, pady=9, font=(font_family(), 10)).pack(side="right")
         self.logs = ttk.Frame(body)
-        self.log = tk.Text(self.logs, height=4, wrap="word", state="disabled", bg="#E9EDF5", fg=INK, relief="flat", font=("Consolas", 9), padx=10, pady=8)
+        self.log = tk.Text(self.logs, height=2, wrap="word", state="disabled", bg="#E9EDF5", fg=INK, relief="flat", font=("Consolas", 9), padx=10, pady=8)
         self.log.pack(fill="both", expand=True)
         ttk.Button(self.logs, text=t("전체 로그 열기"), command=self.open_log).pack(anchor="e", pady=4)
         self.refresh()
@@ -95,12 +103,21 @@ class Dashboard:
     def toggle_logs(self):
         if self.logs.winfo_manager():
             self.logs.pack_forget()
+            if self._compact:
+                self.diagram.pack(fill="x", pady=(8, 0), before=self.actions)
+                self.device_label.pack(anchor="w", pady=(2, 8), before=self.actions)
+            if not self._compact:
+                self.quickstart_title.pack(anchor="w", pady=(10, 4), before=self.footer)
+                self.quickstart.pack(anchor="w", before=self.footer)
             self.log_toggle.configure(text=t("진단 로그 펼치기"))
-            self.win.geometry("740x820")
         else:
+            if self._compact:
+                self.diagram.pack_forget()
+                self.device_label.pack_forget()
+            self.quickstart_title.pack_forget()
+            self.quickstart.pack_forget()
             self.logs.pack(fill="both", expand=True, pady=(12, 0))
             self.log_toggle.configure(text=t("진단 로그 접기"))
-            self.win.geometry("740x980")
 
     def show_about(self):
         from tkinter import messagebox

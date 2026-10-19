@@ -1,4 +1,4 @@
-"""Rebuild the executable icon and README mark from the shared tray artwork."""
+"""Build executable and README icons from the generated Glideleaf mark."""
 from pathlib import Path
 import sys
 

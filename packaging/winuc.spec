@@ -17,6 +17,7 @@ hiddenimports = (
 
 datas = [(str(ROOT / "LICENSE"), "."), (str(ROOT / "THIRD_PARTY_NOTICES.md"), ".")]
 datas += [(str(ROOT / "winuc" / "licenses"), "winuc/licenses")]
+datas += [(str(ROOT / "winuc" / "gui" / "assets" / "glideleaf-mark.png"), "winuc/gui/assets")]
 driver_packages = os.environ.get("GLIDELEAF_DRIVER_PACKAGES")
 if driver_packages:
     import sys

@@ -7,6 +7,8 @@
 
 **Glideleaf is an open-source Windows app that forwards your PC mouse and keyboard to an iPad over Bluetooth Low Energy.** Push the pointer past a configured screen edge to move control to the iPad; push back or use the emergency shortcut to return to Windows. The iPad sees a Bluetooth mouse and keyboard, so no iPad app is required.
 
+If you are looking for **Universal Control for Windows and iPad**, Glideleaf implements the pointer-and-keyboard crossing part with Bluetooth LE HID (HOGP). See the [feature limits](#is-this-universal-control-for-windows) and [hardware requirements](#requirements) before trying it.
+
 **A dedicated compatible USB Bluetooth adapter is required.** Glideleaf takes over that adapter with WinUSB. It is not a Wi-Fi remote desktop, a screen-mirroring app, or a replacement for every macOS Universal Control feature.
 
 English · [한국어](docs/README.ko.md) · [日本語](docs/README.ja.md) · [简体中文](docs/README.zh-Hans.md) · [繁體中文](docs/README.zh-Hant.md)
@@ -143,6 +145,10 @@ Glideleaf uses [Google Bumble](https://github.com/google/bumble) to control the 
 ### Is this Universal Control for Windows?
 
 It provides the mouse/keyboard screen-edge interaction that people look for under that phrase. It does not implement Apple's Continuity protocol, file transfer, clipboard sharing or screen mirroring, and is not affiliated with Apple.
+
+### How do I share a Windows mouse and keyboard with an iPad?
+
+Run Glideleaf on Windows with a dedicated compatible USB Bluetooth adapter, use **Adapter setup / restore** to bind it to WinUSB, then pair the advertised Bluetooth mouse and keyboard in iPadOS Settings. Drag the iPad into position in **Screen layout** and push the pointer across the shared edge. [Setup steps](#run-from-source-on-windows) and [adapter limits](#set-up-the-adapter) apply; this is an alpha source preview.
 
 ### Can I use the built-in Bluetooth radio?
 

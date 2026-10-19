@@ -167,7 +167,7 @@ class SettingsWindow:
             f, variable=self.vars["swap_alt_win"]))
 
         self.vars["jis_mac_style"] = tk.BooleanVar(value=self.config.jis_mac_style)
-        self._row(f, 1, "JIS 変換/無変換 → かな/英数", ttk.Checkbutton(
+        self._row(f, 1, t("일본어 JIS 키보드: 변환/무변환 → 일본어/영문 입력"), ttk.Checkbutton(
             f, variable=self.vars["jis_mac_style"]))
 
         self.vars["release_hotkey"] = tk.StringVar(value=self.config.release_hotkey)

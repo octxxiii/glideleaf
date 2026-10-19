@@ -59,6 +59,16 @@ def test_catalogs_preserve_placeholders_and_cover_all_messages():
                 assert node.args[0].value in base, (path, node.lineno)
 
 
+def test_jis_setting_explains_keyboard_mapping_in_selected_language():
+    key = "일본어 JIS 키보드: 변환/무변환 → 일본어/영문 입력"
+    i18n.set_language("ko")
+    assert i18n.t(key) == key
+    i18n.set_language("en")
+    assert i18n.t(key).startswith("Japanese JIS keyboard:")
+    i18n.set_language("ja")
+    assert "変換/無変換" in i18n.t(key)
+
+
 @pytest.mark.parametrize("language", list(CATALOGS))
 def test_language_preference_survives_save_and_load(tmp_path, language):
     path = tmp_path / "config.json"

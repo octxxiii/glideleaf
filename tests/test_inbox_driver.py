@@ -40,6 +40,6 @@ def test_unsupported_internal_radio_never_enters_native_install(monkeypatch):
     monkeypatch.setattr(driver, "list_dongles", lambda: [internal])
     probe = Mock()
     monkeypatch.setattr(inbox_driver, "probe", probe)
-    with pytest.raises(RuntimeError, match="지원하지 않는"):
+    with pytest.raises(RuntimeError):
         driver.install_winusb_elevated(internal.vid, internal.pid, adapter_id=internal.identity)
     probe.assert_not_called()

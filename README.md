@@ -96,8 +96,13 @@ adapter to another USB port can require applying it again.
 
 1. Start the connection in Glideleaf.
 2. On iPad, open **Settings → Bluetooth** and choose **Windows Pointer & Keyboard** (or the Bluetooth name configured in settings).
-3. Push past the chosen Windows screen edge to control iPad. The default is the right edge.
-4. Push back through the shared edge, or press **Ctrl+Alt+Q**, to return to Windows.
+3. In **Pointer & keyboard → Screen layout**, drag the iPad around the PC and adjust the active crossing segment. The default is the full right edge.
+4. Push past that segment to control iPad.
+5. Push back through the shared edge, or press **Ctrl+Alt+Q**, to return to Windows.
+
+![Custom screen arrangement showing an iPad to the left of the PC and a narrowed crossing segment](docs/images/screen-layout-en.png)
+
+*Simulated Windows UI capture; screen arrangement affects pointer entry and return positions.*
 
 The return position is estimated from sent relative motion. iPadOS applies its own pointer acceleration, so physical-device tuning is still necessary.
 
@@ -107,7 +112,7 @@ The return position is estimated from sent relative motion. iPadOS applies its o
 | --- | --- |
 | Mouse, buttons, scrolling | BLE HID reports; speed, natural scrolling and extra-button scroll actions |
 | Keyboard and media keys | HID keyboard/consumer reports, Alt/Win remapping and Japanese JIS mappings |
-| Screen-edge switching | Push-through resistance, push-back return and emergency shortcut |
+| Screen-edge switching | Drag-to-arrange iPad position, adjustable crossing segment, push-through resistance, push-back return and emergency shortcut |
 | Reconnection | Persisted BLE bonding; physical sleep/resume testing remains open |
 | Desktop controls | Tray, connection panel, settings, adapter setup, bounded logs |
 | Languages | English, 한국어, 日本語, 简体中文, 繁體中文, Español, Français, Deutsch, Português (Brasil) |

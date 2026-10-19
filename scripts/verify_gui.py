@@ -57,6 +57,15 @@ def main(language="ko"):
     panel.win.after_cancel(panel._timer)
     panel.refresh()
     capture(panel.win, f"dashboard-{language}.png")
+    app.config.edge = "top"
+    app.config.layout_center_pct = 65
+    app.config.layout_span_pct = 60
+    panel.win.after_cancel(panel._timer)
+    panel.refresh()
+    capture(panel.win, f"dashboard-layout-{language}.png")
+    app.config.edge = "right"
+    app.config.layout_center_pct = 50
+    app.config.layout_span_pct = 100
     assert panel.log_toggle.winfo_ismapped(), (language, "footer hidden")
     assert panel.log_toggle.winfo_rooty() + panel.log_toggle.winfo_height() <= panel.win.winfo_rooty() + panel.win.winfo_height(), (language, "footer clipped")
     with patch("tkinter.messagebox.showinfo") as about:
@@ -72,6 +81,14 @@ def main(language="ko"):
     saved = []
     settings = SettingsWindow(root, app.config, saved.append)
     capture(settings.win, f"settings-{language}.png")
+    settings.vars["edge"].set(settings._edge_labels["left"])
+    settings.vars["layout_span_pct"].set(50)
+    settings.vars["layout_center_pct"].set(70)
+    settings._render_layout()
+    capture(settings.win, f"settings-layout-{language}.png")
+    settings.vars["edge"].set(settings._edge_labels["right"])
+    settings.vars["layout_span_pct"].set(100)
+    settings.vars["layout_center_pct"].set(50)
     settings.vars["speed"].set(0)
     with patch("winuc.gui.settings.messagebox.showerror") as error:
         settings._save()

@@ -36,6 +36,8 @@ class Config:
 
     # Edge / motion
     edge: str = "right"              # right | left | top | bottom
+    layout_center_pct: int = 50      # Center of the shared segment along the PC edge
+    layout_span_pct: int = 100       # Percent of that edge used for crossing
     push_threshold_px: int = 80      # Push distance required to "break through" the screen edge
     return_threshold_px: int = 80    # Push-back distance required to return from the iPad side
     speed: float = 1.0               # Multiplier for the motion sent to the iPad
@@ -67,6 +69,10 @@ class Config:
             raise ValueError(t("동글 선택과 연결 설정이 일치하지 않습니다. 동글을 다시 적용해 주세요."))
         if self.edge not in ("right", "left", "top", "bottom"):
             raise ValueError(t("iPad 방향을 선택해 주세요."))
+        if (type(self.layout_span_pct) is not int or not 20 <= self.layout_span_pct <= 100
+                or type(self.layout_center_pct) is not int
+                or not self.layout_span_pct / 2 <= self.layout_center_pct <= 100 - self.layout_span_pct / 2):
+            raise ValueError(t("화면 연결 구간의 위치와 길이를 확인해 주세요."))
         if not isinstance(self.speed, (int, float)) or not math.isfinite(self.speed) or not 0.2 <= self.speed <= 5:
             raise ValueError(t("포인터 속도는 0.2~5 사이여야 합니다."))
         for name in ("push_threshold_px", "return_threshold_px", "drag_scroll_px"):

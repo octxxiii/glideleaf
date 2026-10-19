@@ -40,6 +40,8 @@ class UniversalControlApp:
             return_threshold_px=config.return_threshold_px,
             remote_size=tuple(config.ipad_screen),
             speed=config.speed,
+            layout_center_pct=config.layout_center_pct,
+            layout_span_pct=config.layout_span_pct,
         )
         self.capture: InputCapture | None = None
         self.loop: asyncio.AbstractEventLoop | None = None

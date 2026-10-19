@@ -55,6 +55,8 @@ class EdgeStateMachine:
         return_threshold_px: int,
         remote_size: tuple[int, int],
         speed: float = 1.0,
+        layout_center_pct: int = 50,
+        layout_span_pct: int = 100,
         cancel_margin_px: int = 15,
         idle_cancel_ms: int = 400,
     ) -> None:
@@ -65,6 +67,8 @@ class EdgeStateMachine:
         self.return_threshold = return_threshold_px
         self.remote_w, self.remote_h = remote_size
         self.speed = speed
+        self.layout_center_pct = layout_center_pct
+        self.layout_span_pct = layout_span_pct
         self.cancel_margin = cancel_margin_px
         self.idle_cancel_ms = idle_cancel_ms
 
@@ -93,8 +97,11 @@ class EdgeStateMachine:
         For a horizontal edge (top/bottom): edge_coord=y, lo/hi=range of x.
         """
         self._edge_coord = edge_coord
-        self._edge_lo = lo
-        self._edge_hi = hi
+        span = max(0, hi - lo)
+        start = (self.layout_center_pct - self.layout_span_pct / 2) / 100
+        end = (self.layout_center_pct + self.layout_span_pct / 2) / 100
+        self._edge_lo = lo + round(span * start)
+        self._edge_hi = lo + round(span * end)
 
     def hits_edge(self, x: int, y: int) -> bool:
         if self.edge == "right":

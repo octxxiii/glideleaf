@@ -3,6 +3,12 @@
 Keep named placeholders and literal newline escapes in every translation.
 """
 _ROWS = r"""
+화면 배치|Screen layout|画面の配置|屏幕布局|螢幕配置|Distribución de pantallas|Disposition des écrans|Anordnung|Posição das telas
+iPad를 끌어 놓아 PC 주변 위치를 정하세요. 초록색 선이 포인터가 넘어가는 구간입니다.|Drag the iPad around the PC. The green line marks where the pointer crosses.|iPadをドラッグしてPCの周囲に配置します。緑の線がポインターの移動範囲です。|拖动 iPad 调整其在电脑周围的位置。绿色线表示指针可跨越的区域。|拖曳 iPad 調整其在電腦周圍的位置。綠線表示游標可跨越的區域。|Arrastra el iPad alrededor del PC. La línea verde indica dónde cruza el puntero.|Faites glisser l’iPad autour du PC. La ligne verte indique où passe le pointeur.|Ziehen Sie das iPad um den PC. Die grüne Linie markiert den Übergangsbereich des Zeigers.|Arraste o iPad ao redor do PC. A linha verde indica onde o ponteiro atravessa.
+연결 구간 중심 (%)|Crossing center (%)|移動範囲の中心 (%)|跨越区域中心 (%)|跨越區域中心 (%)|Centro del cruce (%)|Centre du passage (%)|Mitte des Übergangs (%)|Centro da travessia (%)
+연결 구간 길이 (%)|Crossing width (%)|移動範囲の長さ (%)|跨越区域长度 (%)|跨越區域長度 (%)|Ancho del cruce (%)|Largeur du passage (%)|Breite des Übergangs (%)|Largura da travessia (%)
+{side} · 가장자리 {span}% 사용|{side} · {span}% of the edge active|{side} · 端の{span}%を使用|{side} · 使用边缘的 {span}%|{side} · 使用邊緣的 {span}%|{side} · {span}% del borde activo|{side} · {span}% du bord actif|{side} · {span}% des Rands aktiv|{side} · {span}% da borda ativa
+화면 연결 구간의 위치와 길이를 확인해 주세요.|Check the crossing area's position and width.|移動範囲の位置と長さを確認してください。|请检查跨越区域的位置和长度。|請檢查跨越區域的位置和長度。|Comprueba la posición y el ancho del cruce.|Vérifiez la position et la largeur du passage.|Prüfen Sie Position und Breite des Übergangs.|Confira a posição e a largura da travessia.
 지원하지 않는 동글입니다. 장치를 변경하지 않습니다.|This dongle is not supported. No device was changed.|このドングルはサポートされていません。デバイスは変更しません。|不支持此适配器。不会更改设备。|不支援此轉接器。不會變更裝置。|Este adaptador no es compatible. No se cambió ningún dispositivo.|Cet adaptateur n’est pas pris en charge. Aucun appareil n’a été modifié.|Dieser Dongle wird nicht unterstützt. Es wurde kein Gerät geändert.|Este adaptador não é compatível. Nenhum dispositivo foi alterado.
 복합 USB 장치의 자체 드라이버 전환은 아직 지원하지 않습니다. 장치를 변경하지 않습니다.|Native setup does not yet support composite USB interfaces. No device will be changed.|複合USBデバイスの内蔵設定は未対応です。デバイスは変更しません。|内置安装尚不支持复合 USB 接口。不会更改设备。|內建安裝尚未支援複合 USB 介面。不會變更裝置。|La instalación integrada no admite interfaces USB compuestas. No se cambiará el dispositivo.|L’installation intégrée ne prend pas en charge les interfaces USB composites. Aucun appareil ne sera modifié.|Integrierte Einrichtung unterstützt noch keine zusammengesetzten USB-Geräte. Es wird nichts geändert.|A instalação integrada não aceita interfaces USB compostas. Nenhum dispositivo será alterado.
 드라이버 전환을 완료하려면 Windows를 다시 시작한 뒤 연결해 주세요.|Restart Windows to finish driver setup, then connect.|設定を完了するにはWindowsを再起動してから接続してください。|请重启 Windows 完成驱动设置，然后连接。|請重新啟動 Windows 完成驅動程式設定，再連線。|Reinicia Windows para completar la instalación y conecta.|Redémarrez Windows pour terminer l’installation, puis connectez-vous.|Windows zum Abschließen der Einrichtung neu starten, dann verbinden.|Reinicie o Windows para concluir a instalação e conecte.
@@ -67,7 +73,7 @@ Glideleaf 설정|Glideleaf settings|Glideleaf 設定|Glideleaf 设置|Glideleaf 
 포인터|Pointer|ポインター|指针|游標|Puntero|Pointeur|Zeiger|Ponteiro
 키보드|Keyboard|キーボード|键盘|鍵盤|Teclado|Clavier|Tastatur|Teclado
 마우스 버튼|Mouse buttons|マウスボタン|鼠标按钮|滑鼠按鈕|Botones del ratón|Boutons de souris|Maustasten|Botões do mouse
-고급 연결|Advanced connection|接続の詳細|高级连接|進階連線|Conexión avanzada|Connexion avancée|Erweiterte Verbindung|Conexão avançada
+고급 연결|Advanced connection|接続の詳細|高级连接|進階連線|Conexión avanzada|Connexion avancée|Erweitert|Conexão avançada
 iPad 위치|iPad position|iPadの位置|iPad 位置|iPad 位置|Posición del iPad|Position de l’iPad|iPad-Position|Posição do iPad
 포인터 속도|Pointer speed|ポインター速度|指针速度|游標速度|Velocidad del puntero|Vitesse du pointeur|Zeigergeschwindigkeit|Velocidade do ponteiro
 진입 저항 (px)|Entry resistance (px)|移動時の抵抗 (px)|进入阻力 (px)|進入阻力 (px)|Resistencia al entrar (px)|Résistance d’entrée (px)|Eintrittswiderstand (px)|Resistência de entrada (px)

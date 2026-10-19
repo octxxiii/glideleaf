@@ -10,6 +10,7 @@ from tkinter import ttk
 from ..paths import log_path
 from .theme import BG, INK, MUTED, BLUE, LINE, configure, font_family
 from .icons import apply_window_icon, make_icon
+from .layout_diagram import draw_layout
 
 
 STATUS = {
@@ -87,18 +88,9 @@ class Dashboard:
         self.refresh()
 
     def draw_devices(self):
-        canvas = self.diagram
-        canvas.delete("all")
-        width = max(600, canvas.winfo_width())
-        left, right = ("iPad", "Windows PC") if self.app.config.edge == "left" else ("Windows PC", "iPad")
-        for x, label in ((width / 2 - 218, left), (width / 2 + 38, right)):
-            canvas.create_rectangle(x, 8, x + 180, 84, fill="white", outline=LINE, width=1)
-            canvas.create_rectangle(x, 8, x + 180, 12, fill="#B9E7D8", outline="")
-            canvas.create_text(x + 90, 48, text=label, fill=INK, font=("Segoe UI", 12, "bold"))
-        canvas.create_line(width / 2 - 37, 46, width / 2 + 37, 46, fill=BLUE, width=2)
-        canvas.create_oval(width / 2 - 5, 41, width / 2 + 5, 51, fill=BLUE, outline="white", width=2)
-        edge = EDGES[self.app.config.edge]
-        canvas.create_text(width / 2, 99, text=t("{edge} 연결", edge=t(edge)), fill=MUTED, font=(font_family(), 9))
+        config = self.app.config
+        draw_layout(self.diagram, config.edge, config.layout_center_pct,
+                    config.layout_span_pct, compact=True)
 
     def toggle_logs(self):
         if self.logs.winfo_manager():

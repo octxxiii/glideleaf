@@ -1,4 +1,4 @@
-# Build a development portable app, or a signed native-driver release.
+# Build a development portable app, or a signed application release.
 param(
     [switch]$Release,
     [string]$DriverPackageDir,
@@ -17,10 +17,9 @@ Push-Location $repo
 $previousPackages = $env:GLIDELEAF_DRIVER_PACKAGES
 try {
     if ($Release) {
-        if (-not $DriverPackageDir -or -not $CertificateThumbprint -or -not $Publisher) {
-            throw "Release needs signed DriverPackageDir, CertificateThumbprint and Publisher. No unsigned fallback."
+        if (-not $CertificateThumbprint -or -not $Publisher) {
+            throw "Release needs CertificateThumbprint and Publisher for application signing."
         }
-        $DriverPackageDir = (Resolve-Path -LiteralPath $DriverPackageDir).Path
         if ($CertificateThumbprint -notmatch '^[0-9a-fA-F]{40}$') { throw "Invalid certificate thumbprint." }
         $cert = Get-ChildItem Cert:\CurrentUser\My -CodeSigningCert | Where-Object Thumbprint -eq $CertificateThumbprint
         if (-not $cert -or -not $cert.HasPrivateKey -or $cert.NotAfter -le (Get-Date)) {
@@ -34,9 +33,14 @@ try {
             if ($tool) { $SignToolPath = $tool.Source }
         }
         if (-not $SignToolPath) { throw "Windows SDK signtool.exe is required for release." }
-        & $python scripts/check_native_release.py --root $DriverPackageDir
-        if ($LASTEXITCODE -ne 0) { throw "Signed driver package preflight failed." }
-        $env:GLIDELEAF_DRIVER_PACKAGES = $DriverPackageDir
+        if ($DriverPackageDir) {
+            $DriverPackageDir = (Resolve-Path -LiteralPath $DriverPackageDir).Path
+            & $python scripts/check_native_release.py --root $DriverPackageDir
+            if ($LASTEXITCODE -ne 0) { throw "Optional signed driver package preflight failed." }
+            $env:GLIDELEAF_DRIVER_PACKAGES = $DriverPackageDir
+        } else {
+            Remove-Item Env:\GLIDELEAF_DRIVER_PACKAGES -ErrorAction SilentlyContinue
+        }
     } elseif ($DriverPackageDir) {
         $env:GLIDELEAF_DRIVER_PACKAGES = (Resolve-Path -LiteralPath $DriverPackageDir).Path
     } else {
@@ -59,9 +63,9 @@ try {
     if ($Release) {
         & $SignToolPath sign /sha1 $CertificateThumbprint /fd SHA256 /tr $TimestampUrl /td SHA256 $app
         if ($LASTEXITCODE -ne 0) { throw "Application/helper signing failed." }
-        & (Join-Path $PSScriptRoot 'verify_release.ps1') -AppPath $app -Publisher $Publisher -DriverPackageDir (Join-Path $repo 'dist\Glideleaf\_internal\driver-packages') -PythonPath $python
+        & (Join-Path $PSScriptRoot 'verify_release.ps1') -AppPath $app -Publisher $Publisher -PythonPath $python -DriverPackageDir $(if ($DriverPackageDir) { Join-Path $repo 'dist\Glideleaf\_internal\driver-packages' })
     } else {
-        Write-Host 'DEVELOPMENT BUILD: unsigned app; native installation requires separately signed driver packages.'
+        Write-Host 'DEVELOPMENT BUILD: unsigned app; Windows inbox WinUSB is used for dongle setup.'
     }
     Write-Host "Portable app: $app"
 } finally {

@@ -22,14 +22,18 @@ def test_localized_list_checks_actual_inf(tmp_path, monkeypatch):
 
 
 def test_restore_never_deletes_unrelated_winusb(tmp_path, monkeypatch):
-    directory = tmp_path / "INF"
-    directory.mkdir()
-    (directory / "oem1.inf").write_text("WinUSB\nUSB\\VID_9999&PID_0001", encoding="utf-8")
+    from winuc import inbox_driver
+    selected = driver.Dongle(0x0411, 0x0374, r"USB\VID_0411&PID_0374\selected", "Selected", "winusb")
+    monkeypatch.setattr(driver, "is_admin", lambda: True)
+    monkeypatch.setattr(driver, "list_dongles", lambda: [selected])
+    restore = []
+    monkeypatch.setattr(inbox_driver, "restore", lambda instance: restore.append(instance) or False)
     calls = []
     def run(command, **kwargs):
         calls.append(command)
-        return SimpleNamespace(returncode=0, stdout="Published Name: oem1.inf")
-    monkeypatch.setenv("WINDIR", str(tmp_path))
+        raise AssertionError("Restore must not call pnputil")
     monkeypatch.setattr(driver, "_run", run)
-    driver.restore_inbox(0x0411, 0x0374)
-    assert not any("/delete-driver" in call for call in calls)
+    monkeypatch.setattr(driver, "list_dongles", lambda: [driver.Dongle(0x0411, 0x0374, selected.instance_id, "Selected", "inbox")] if restore else [selected])
+    driver.restore_inbox(0x0411, 0x0374, adapter_id=selected.identity)
+    assert restore == [selected.instance_id]
+    assert not calls

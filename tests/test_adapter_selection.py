@@ -136,7 +136,7 @@ def test_connect_action_targets_preview_then_applies_and_starts(monkeypatch, des
     records = [INTEL, {**REALTEK, "Service": "BTHUSB"}]
     monkeypatch.setattr(driver, "_pnp_query", lambda: records)
     install, apply, ready = Mock(), Mock(), Mock()
-    monkeypatch.setattr("winuc.native_driver.prepare_package", Mock())
+    monkeypatch.setattr("winuc.inbox_driver.probe", Mock())
     monkeypatch.setattr(driver, "install_winusb_elevated", install)
     monkeypatch.setattr("winuc.gui.setup_wizard.messagebox.askyesno", lambda *args, **kwargs: True)
     root = desktop_root
@@ -259,7 +259,7 @@ def test_connect_failure_never_installs_or_starts(monkeypatch, desktop_root, fai
     from winuc.gui.setup_wizard import SetupWizard
     monkeypatch.setattr(driver, "_pnp_query", lambda: [INTEL])
     preflight = Mock(side_effect=RuntimeError("untrusted") if failure == "package" else None)
-    monkeypatch.setattr("winuc.native_driver.prepare_package", preflight)
+    monkeypatch.setattr("winuc.inbox_driver.probe", preflight)
     monkeypatch.setattr("winuc.gui.setup_wizard.messagebox.askyesno", lambda *a, **k: True)
     monkeypatch.setattr("winuc.gui.setup_wizard.messagebox.showerror", Mock())
     install, ready, prepare = Mock(), Mock(), Mock()

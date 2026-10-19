@@ -294,6 +294,9 @@ def _selected_target(vid: int, pid: int, identity: str | None = None) -> Dongle:
 
 def _check_native_target(selected: Dongle) -> None:
     from .i18n import t
+    from .native_driver import SUPPORTED_IDS
+    if selected.vidpid not in SUPPORTED_IDS:
+        raise RuntimeError(t("지원하지 않는 동글입니다. 장치를 변경하지 않습니다."))
     hardware = selected.instance_id.split("\\", 2)
     expected = f"VID_{selected.vid:04X}&PID_{selected.pid:04X}"
     if len(hardware) != 3 or hardware[1].upper() != expected:
@@ -303,17 +306,17 @@ def _check_native_target(selected: Dongle) -> None:
 
 
 def install_winusb(vid: int, pid: int, name: str = "Glideleaf Bluetooth", *, adapter_id: str | None = None) -> None:
-    """Own elevated helper: Windows APIs, a signed package, and a unique target."""
-    from . import native_driver
+    """Bind Microsoft's existing WinUSB model to one selected USB instance."""
+    from . import inbox_driver, native_driver
     if not is_admin():
         raise PermissionError("Administrator approval is required for driver setup")
-    package = native_driver.prepare_package(vid, pid)
     selected = _selected_target(vid, pid, adapter_id)
     if selected.is_winusb:
         return
     _check_native_target(selected)
-    logger.info("Native driver install: USB %04X:%04X, signer=%s", vid, pid, package.signer)
-    if native_driver.update_driver(vid, pid, package):
+    candidate = inbox_driver.probe(selected.instance_id)
+    logger.info("Inbox WinUSB install: %s, signer=%s", selected.instance_id, candidate.signer)
+    if inbox_driver.install(selected.instance_id):
         raise native_driver.RebootRequired()
     require_selected_adapter(selected.identity, selected.transport)
 
@@ -343,14 +346,19 @@ def _block_matches(block: list[str], hwid: str) -> bool:
     return "winusb" in text and re.search(re.escape(hwid.lower()) + r"(?![0-9a-f])", text) is not None
 
 
-def restore_inbox(vid: int, pid: int) -> None:
-    """Remove the WinUSB package and let Windows reapply the in-box driver."""
-    for inf in _enum_winusb_oem_infs(vid, pid):
-        result = _run(["pnputil", "/delete-driver", inf, "/uninstall", "/force"], timeout=120)
-        if result.returncode != 0:
-            raise RuntimeError(f"Could not restore driver package {inf}: {result.stderr.strip()}")
-    if _run(["pnputil", "/scan-devices"], timeout=60).returncode != 0:
-        raise RuntimeError("Windows device scan failed")
+def restore_inbox(vid: int, pid: int, *, adapter_id: str | None = None) -> None:
+    """Ask Windows to install its best matching driver on one selected device."""
+    from . import inbox_driver, native_driver
+    if not is_admin():
+        raise PermissionError("Administrator approval is required for driver restoration")
+    selected = _selected_target(vid, pid, adapter_id)
+    _check_native_target(selected)
+    if inbox_driver.restore(selected.instance_id):
+        raise native_driver.RebootRequired()
+    current = _selected_target(vid, pid, selected.identity)
+    if current.driver != "inbox":
+        from .i18n import t
+        raise RuntimeError(t("일반 Bluetooth 드라이버 복원을 확인하지 못했습니다. 동글을 다시 연결하고 다시 검색해 주세요."))
 
 
 # ------------------------------------------------------------- elevation
@@ -467,12 +475,12 @@ def driver_result_path(value: str) -> Path:
 
 
 def install_winusb_elevated(vid: int, pid: int, name: str = "Glideleaf Bluetooth", *, adapter_id: str | None = None) -> None:
-    from .native_driver import prepare_package
+    from .inbox_driver import probe
     selected = _selected_target(vid, pid, adapter_id)
     if selected.is_winusb:
         return
     _check_native_target(selected)
-    prepare_package(vid, pid)  # Stop before UAC if the release package is absent/untrusted.
+    probe(selected.instance_id)  # Read-only check before UAC.
     if is_admin():
         install_winusb(vid, pid, name, adapter_id=selected.identity)
     else:
@@ -487,7 +495,7 @@ def restore_inbox_elevated(vid: int, pid: int, *, adapter_id: str | None = None)
         return
     _check_native_target(selected)
     if is_admin():
-        restore_inbox(vid, pid)
+        restore_inbox(vid, pid, adapter_id=selected.identity)
     else:
         _elevated_operation("restore", vid, pid, selected)
     current = _selected_target(vid, pid, selected.identity)

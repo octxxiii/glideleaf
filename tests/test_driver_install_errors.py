@@ -6,7 +6,7 @@ import sys
 
 import pytest
 
-from winuc import driver, native_driver
+from winuc import driver, native_driver, inbox_driver
 
 
 @pytest.fixture
@@ -18,16 +18,16 @@ def selected(monkeypatch):
 
 
 def test_missing_signed_package_stops_before_uac(monkeypatch, selected):
-    monkeypatch.setattr(native_driver, "prepare_package", Mock(side_effect=RuntimeError("signed package missing")))
+    monkeypatch.setattr(inbox_driver, "probe", Mock(side_effect=RuntimeError("inbox driver unavailable")))
     elevate = Mock()
     monkeypatch.setattr(driver, "_relaunch_elevated", elevate)
-    with pytest.raises(RuntimeError, match="signed package missing"):
+    with pytest.raises(RuntimeError, match="inbox driver unavailable"):
         driver.install_winusb_elevated(selected.vid, selected.pid, adapter_id=selected.identity)
     elevate.assert_not_called()
 
 
 def test_native_install_uses_only_applied_identity_and_verifies_binding(monkeypatch, selected):
-    monkeypatch.setattr(native_driver, "prepare_package", Mock())
+    monkeypatch.setattr(inbox_driver, "probe", Mock())
     def elevate(args):
         assert "--driver-install" in args
         assert args[args.index("--adapter-id") + 1] == selected.identity
@@ -39,27 +39,27 @@ def test_native_install_uses_only_applied_identity_and_verifies_binding(monkeypa
 
 
 def test_native_failure_returns_exact_child_detail(monkeypatch, selected):
-    monkeypatch.setattr(native_driver, "prepare_package", Mock())
+    monkeypatch.setattr(inbox_driver, "probe", Mock())
     def elevate(args):
         Path(args[args.index("--driver-result") + 1]).write_text(json.dumps({
-            "operation": "install", "adapter_id": selected.identity, "error": "Windows rejected catalog",
+            "operation": "install", "adapter_id": selected.identity, "error": "Windows denied installation",
         }), encoding="utf-8")
         return 1
     from pathlib import Path
     monkeypatch.setattr(driver, "_relaunch_elevated", elevate)
-    with pytest.raises(RuntimeError, match="Windows rejected catalog"):
+    with pytest.raises(RuntimeError, match="Windows denied installation"):
         driver.install_winusb_elevated(selected.vid, selected.pid)
 
 
 def test_process_success_without_winusb_is_not_install_success(monkeypatch, selected):
-    monkeypatch.setattr(native_driver, "prepare_package", Mock())
+    monkeypatch.setattr(inbox_driver, "probe", Mock())
     monkeypatch.setattr(driver, "_relaunch_elevated", lambda args: 0)
     with pytest.raises(RuntimeError):
         driver.install_winusb_elevated(selected.vid, selected.pid)
 
 
 def test_reboot_requirement_survives_elevation(monkeypatch, selected):
-    monkeypatch.setattr(native_driver, "prepare_package", Mock())
+    monkeypatch.setattr(inbox_driver, "probe", Mock())
     monkeypatch.setattr(driver, "_relaunch_elevated", lambda args: native_driver.REBOOT_EXIT_CODE)
     with pytest.raises(native_driver.RebootRequired):
         driver.install_winusb_elevated(selected.vid, selected.pid)
@@ -67,10 +67,10 @@ def test_reboot_requirement_survives_elevation(monkeypatch, selected):
 
 def test_missing_exact_target_never_calls_native_update(monkeypatch, selected):
     monkeypatch.setattr(driver, "is_admin", lambda: True)
-    monkeypatch.setattr(native_driver, "prepare_package", Mock())
+    monkeypatch.setattr(inbox_driver, "probe", Mock())
     monkeypatch.setattr(driver, "list_dongles", lambda: [replace(selected, instance_id="another-port")])
     update = Mock()
-    monkeypatch.setattr(native_driver, "update_driver", update)
+    monkeypatch.setattr(inbox_driver, "install", update)
     with pytest.raises(RuntimeError):
         driver.install_winusb(selected.vid, selected.pid, adapter_id=selected.identity)
     update.assert_not_called()
@@ -78,10 +78,10 @@ def test_missing_exact_target_never_calls_native_update(monkeypatch, selected):
 
 def test_duplicate_hardware_id_never_calls_native_update(monkeypatch, selected):
     monkeypatch.setattr(driver, "is_admin", lambda: True)
-    monkeypatch.setattr(native_driver, "prepare_package", Mock())
+    monkeypatch.setattr(inbox_driver, "probe", Mock())
     monkeypatch.setattr(driver, "list_dongles", lambda: [selected, replace(selected, instance_id="duplicate")])
     update = Mock()
-    monkeypatch.setattr(native_driver, "update_driver", update)
+    monkeypatch.setattr(inbox_driver, "install", update)
     with pytest.raises(RuntimeError):
         driver.install_winusb(selected.vid, selected.pid, adapter_id=selected.identity)
     update.assert_not_called()
@@ -137,9 +137,9 @@ def test_composite_interface_never_replaces_parent_or_other_functions(monkeypatc
     interface = replace(selected, instance_id=r"USB\VID_0A12&PID_0001&MI_00\interface")
     monkeypatch.setattr(driver, "list_dongles", lambda: [interface])
     package, elevate, update = Mock(), Mock(), Mock()
-    monkeypatch.setattr(native_driver, "prepare_package", package)
+    monkeypatch.setattr(inbox_driver, "probe", package)
     monkeypatch.setattr(driver, "_relaunch_elevated", elevate)
-    monkeypatch.setattr(native_driver, "update_driver", update)
+    monkeypatch.setattr(inbox_driver, "install", update)
     with pytest.raises(RuntimeError):
         driver.install_winusb_elevated(interface.vid, interface.pid, adapter_id=interface.identity)
     package.assert_not_called()

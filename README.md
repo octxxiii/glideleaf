@@ -70,19 +70,18 @@ Explicit legacy/manual transports remain supported.
 *Actual desktop UI with two simulated adapters; not physical-device qualification.*
 
 Select your adapter and click **Connect adapter**. The app-owned setup helper
-saves the selection, requests Windows administrator approval, installs its
-hardware-specific signed WinUSB package through Windows APIs, verifies the
+saves the selection, requests Windows administrator approval, selects Microsoft's
+already installed WinUSB model for that device through Windows APIs, verifies the
 binding and starts the connection. No Zadig window or third-party installer
 download is used. **Adapter setup / restore** restores normal Bluetooth use.
 
-**Native installation is not release-ready yet:** this checkout does not contain
-production-signed driver catalogs or a signed app. Source/development builds
-stop before UAC when the package is missing or untrusted. Adapters already bound
-to WinUSB can still be applied and used. A reboot request is reported separately;
+**Physical CSR setup is not qualified yet:** this checkout has no signed app
+release or recorded CSR/iPad installation test. The default setup path needs no
+custom driver catalog. A reboot request is reported separately;
 process exit alone never counts as successful driver installation.
 
-See [native setup and signing](docs/DRIVER_TOOL.md). Release builds require signed
-packages and a valid application publisher signature. Physical CSR/iPad setup,
+See [native setup and signing](docs/DRIVER_TOOL.md). A trusted public release
+still needs a valid application publisher signature. Physical CSR/iPad setup,
 restore and reconnect qualification is still outstanding. Do not change an
 adapter used by your only keyboard or mouse.
 

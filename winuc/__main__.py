@@ -80,7 +80,7 @@ def main() -> int:
 
     if args.driver_check is not None:
         import json
-        from .native_driver import readiness
+        from .inbox_driver import readiness
         report = readiness()
         output = json.dumps(report, ensure_ascii=False, indent=2)
         destination = args.driver_check
@@ -128,7 +128,7 @@ def main() -> int:
                 driver.install_winusb(vid, pid, adapter_id=selected.identity)
             else:
                 driver._check_native_target(selected)
-                driver.restore_inbox(vid, pid)
+                driver.restore_inbox(vid, pid, adapter_id=selected.identity)
         except RebootRequired as exc:
             code, error = REBOOT_EXIT_CODE, str(exc)
         except Exception as exc:  # A windowless UAC child has no usable stderr.

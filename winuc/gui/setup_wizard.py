@@ -241,8 +241,8 @@ class SetupWizard:
             driver.install_winusb_elevated(d.vid, d.pid, adapter_id=d.identity)
             if self.on_ready is not None:
                 self.on_ready()
-        from ..native_driver import prepare_package
-        self._run_driver(d, action, t("선택한 동글을 설정하고 있습니다… Windows 관리자 권한 요청을 확인하세요."), t("동글 설정을 완료했습니다. 연결 상태를 확인해 주세요."), preflight=lambda: prepare_package(d.vid, d.pid))
+        from ..inbox_driver import probe
+        self._run_driver(d, action, t("선택한 동글을 설정하고 있습니다… Windows 관리자 권한 요청을 확인하세요."), t("동글 설정을 완료했습니다. 연결 상태를 확인해 주세요."), preflight=lambda: probe(d.instance_id))
 
     def _restore(self) -> None:
         d = self._dongle

@@ -138,6 +138,31 @@ The virtual BLE integration test pairs two Bumble controllers, discovers HID ser
 
 See [contributing](CONTRIBUTING.md), [hardware validation](docs/HARDWARE_VALIDATION.md), [security reporting](SECURITY.md), and [changes](CHANGELOG.md).
 
+### USB adapter not detected?
+
+Open **Adapter setup / restore → Copy USB diagnostics** and review the report.
+The scan now distinguishes an enumeration error from a successful scan with no
+Bluetooth candidates. It checks driver services and Bluetooth HCI identifiers,
+rather than assuming every `USBDevice` is a WinUSB Bluetooth adapter.
+
+Alternatively, generate a read-only report without starting BLE or input capture:
+
+```powershell
+.\.venv\Scripts\python.exe -m glideleaf --diagnose usb-diagnostics.json
+```
+
+If Python is unavailable, the standalone script needs only Windows PowerShell:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/diagnose_usb.ps1 -Copy
+```
+
+Paste the reviewed JSON into a bug report together with your adapter model.
+Reports omit USB serial suffixes and do not read pairing keys or input logs.
+Use the report from the **affected PC**. Detecting a device is separate from
+confirming its BLE compatibility; a keyboard/mouse HID receiver is not itself
+a USB Bluetooth HCI adapter.
+
 ### Build a local executable
 
 ```powershell

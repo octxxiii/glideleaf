@@ -59,6 +59,8 @@ def main() -> int:
     parser.add_argument("--setup", action="store_true", help="Open the setup wizard (GUI)")
     parser.add_argument("--selftest", action="store_true",
                         help="Validate the BLE layer on a virtual controller (no dongle)")
+    parser.add_argument("--diagnose", nargs="?", const="-", metavar="FILE",
+                        help="Read-only USB diagnostics as JSON (stdout, or the given file)")
     parser.add_argument("--no-capture", action="store_true",
                         help="Start BLE only, without input hooks (for pairing checks)")
     parser.add_argument("--verbose", "-v", action="store_true")
@@ -70,6 +72,20 @@ def main() -> int:
     args = parser.parse_args()
 
     _setup_logging(args.verbose, to_file=args.tray)
+
+    if args.diagnose is not None:
+        from .diagnostics import collect_report, report_text
+        report = collect_report()
+        text = report_text(report)
+        destination = args.diagnose
+        if destination == "-" and getattr(sys, "frozen", False):
+            from .paths import data_dir
+            destination = str(data_dir() / "usb-diagnostics.json")
+        if destination == "-":
+            print(text)
+        else:
+            Path(destination).write_text(text, encoding="utf-8")
+        return 1 if report["enumeration_error"] else 0
 
     # --- Elevated driver operations (run in a short-lived elevated process) ---
     if args.driver_install or args.driver_restore:

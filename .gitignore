@@ -24,6 +24,7 @@ artifacts/
 # Misc
 selftest_keys.json
 pairing_keys.json
+usb-diagnostics*.json
 *.log
 *.log.*
 scripts/zadig.exe

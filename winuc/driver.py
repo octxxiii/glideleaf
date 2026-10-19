@@ -83,44 +83,99 @@ def wdi_simple_path() -> Path | None:
 
 # --------------------------------------------------------------- detection
 
-def _pnp_query() -> list[dict[str, str]]:
-    """Return USB device info via PowerShell Get-PnpDevice (JSON)."""
+class DongleDetectionError(RuntimeError):
+    """USB enumeration failed; this must not be presented as 'no device'."""
+
+
+_PNP_SCRIPT = r"""
+$ErrorActionPreference = 'Stop'
+[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+$OutputEncoding = [Console]::OutputEncoding
+try {
+    $devices = @(Get-CimInstance Win32_PnPEntity -ErrorAction Stop |
+        Where-Object { $_.Present -and $_.PNPDeviceID -like 'USB\VID_*' } |
+        ForEach-Object {
+            [PSCustomObject]@{
+                InstanceId = $_.PNPDeviceID
+                FriendlyName = $_.Name
+                Class = $_.PNPClass
+                Status = $_.Status
+                Service = $_.Service
+                CompatibleIds = @($_.CompatibleID)
+                ProblemCode = $_.ConfigManagerErrorCode
+            }
+        })
+} catch {
+    $devices = @(Get-PnpDevice -PresentOnly -ErrorAction Stop |
+        Where-Object { $_.InstanceId -like 'USB\VID_*' } |
+        ForEach-Object {
+            $device = $_
+            $props = @(Get-PnpDeviceProperty -InstanceId $device.InstanceId -KeyName DEVPKEY_Device_Service,DEVPKEY_Device_CompatibleIds -ErrorAction Stop)
+            [PSCustomObject]@{
+                InstanceId = $device.InstanceId
+                FriendlyName = $device.FriendlyName
+                Class = $device.Class
+                Status = $device.Status
+                Service = ($props | Where-Object KeyName -eq 'DEVPKEY_Device_Service').Data
+                CompatibleIds = @(($props | Where-Object KeyName -eq 'DEVPKEY_Device_CompatibleIds').Data)
+            }
+        })
+}
+ConvertTo-Json -InputObject @($devices) -Compress -Depth 4
+"""
+
+
+def _pnp_query() -> list[dict]:
+    """Enumerate USB nodes with UTF-8 output, actual service and HCI class IDs."""
     if sys.platform != "win32":
         return []
-    script = (
-        "Get-PnpDevice -PresentOnly | "
-        "Where-Object { $_.InstanceId -like 'USB\\VID_*' } | "
-        "Select-Object InstanceId, FriendlyName, Class, Status | "
-        "ConvertTo-Json -Compress"
-    )
-    try:
-        out = subprocess.run(
-            ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
-            capture_output=True, text=True, timeout=30, check=False,
-        ).stdout.strip()
-    except (OSError, subprocess.TimeoutExpired):
-        return []
-    if not out:
-        return []
     import json
+    import shutil
 
-    data = json.loads(out)
-    return data if isinstance(data, list) else [data]
+    system_root = Path(os.environ.get("SystemRoot", r"C:\Windows"))
+    executable = system_root / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
+    shell = str(executable) if executable.is_file() else shutil.which("powershell.exe")
+    if shell is None:
+        raise DongleDetectionError("Windows PowerShell was not found")
+    try:
+        result = subprocess.run(
+            [shell, "-NoProfile", "-NonInteractive", "-Command", _PNP_SCRIPT],
+            capture_output=True, timeout=30, check=False,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise DongleDetectionError("USB enumeration timed out after 30 seconds") from exc
+    except OSError as exc:
+        raise DongleDetectionError(f"Could not start USB enumeration: {exc}") from exc
+    if result.returncode:
+        detail = result.stderr.decode("utf-8-sig", errors="replace").strip()
+        raise DongleDetectionError(f"USB enumeration failed (exit {result.returncode}): {detail[:1200]}")
+    try:
+        data = json.loads(result.stdout.decode("utf-8-sig"))
+    except (UnicodeError, json.JSONDecodeError) as exc:
+        raise DongleDetectionError("USB enumeration returned invalid UTF-8 JSON") from exc
+    # Accept the old single-object shape, but reject error text and malformed data.
+    if isinstance(data, dict):
+        data = [data]
+    if not isinstance(data, list) or any(not isinstance(item, dict) for item in data):
+        raise DongleDetectionError("USB enumeration returned an unexpected data format")
+    return data
 
 
-_VIDPID_RE = re.compile(r"USB\\VID_([0-9A-Fa-f]{4})&PID_([0-9A-Fa-f]{4})")
+_VIDPID_RE = re.compile(r"USB\\VID_([0-9A-Fa-f]{4})&PID_([0-9A-Fa-f]{4})", re.IGNORECASE)
 
 
-def list_dongles(known_only: bool = False) -> list[Dongle]:
+def list_dongles(known_only: bool = False, *, devices: list[dict] | None = None) -> list[Dongle]:
     """Enumerate present USB Bluetooth dongles and their current driver binding.
 
     Deduplicated by VID/PID (composite devices enumerate one node per
     interface). Only known dongles, Bluetooth-class devices, and WinUSB-bound
-    devices are reported -- unrelated USB gear (mice, storage) is skipped.
+    devices with Bluetooth HCI evidence are reported -- unrelated USB gear
+    (including generic WinUSB devices and HID receivers) is skipped.
     """
     by_vidpid: dict[tuple[int, int], Dongle] = {}
-    for entry in _pnp_query():
-        instance_id = entry.get("InstanceId", "")
+    for entry in _pnp_query() if devices is None else devices:
+        instance_id = entry.get("InstanceId") or ""
         match = _VIDPID_RE.match(instance_id)
         if not match:
             continue
@@ -130,14 +185,23 @@ def list_dongles(known_only: bool = False) -> list[Dongle]:
         name = entry.get("FriendlyName") or ""
         is_known = (vid, pid) in KNOWN_DONGLES
         looks_bluetooth = cls == "bluetooth" or "bluetooth" in name.lower()
-        is_winusb = cls in ("usbdevice", "winusb")
+        service = (entry.get("Service") or "").lower()
+        if cls == "hidclass" or service == "hidusb":
+            continue  # A keyboard/mouse receiver is not a USB Bluetooth radio.
+        compatible_ids = entry.get("CompatibleIds") or []
+        if isinstance(compatible_ids, str):
+            compatible_ids = [compatible_ids]
+        has_hci_interface = any(str(value).lower().startswith("usb\\class_e0&subclass_01&prot_01") for value in compatible_ids)
+        looks_bluetooth = looks_bluetooth or service == "bthusb" or has_hci_interface
+        # USBDevice is a generic setup class used by non-Bluetooth devices too.
+        is_winusb = service == "winusb" or cls == "winusb"
 
-        if not (is_known or looks_bluetooth or is_winusb):
+        if not (is_known or looks_bluetooth):
             continue
         if known_only and not is_known:
             continue
 
-        driver = "winusb" if is_winusb else "inbox" if cls == "bluetooth" else "unknown"
+        driver = "winusb" if is_winusb else "inbox" if cls == "bluetooth" or service == "bthusb" else "unknown"
         # A WinUSB-bound known dongle has no meaningful Class name; trust the
         # known list for its label. Prefer the most informative record per VID/PID.
         existing = by_vidpid.get((vid, pid))

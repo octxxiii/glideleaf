@@ -11,6 +11,7 @@ from tkinter import ttk, messagebox
 from typing import Callable
 
 from .. import driver
+from ..diagnostics import build_report, report_text
 from .theme import configure
 
 
@@ -21,6 +22,7 @@ class SetupWizard:
         self._results = queue.SimpleQueue()
         self._closed = False
         self._busy = False
+        self._diagnostic_text = ""
         self.win = tk.Toplevel(root)
         self.win.title(t("Glideleaf 동글 설정"))
         self.win.resizable(False, False)
@@ -43,6 +45,8 @@ class SetupWizard:
         self.action_btn = ttk.Button(frm, text=t("다시 검색"), command=self.refresh)
         self.action_btn.grid(row=3, column=0, sticky="w")
         ttk.Button(frm, text=t("닫기"), command=self._close).grid(row=3, column=1, sticky="e")
+        self.copy_btn = ttk.Button(frm, text=t("USB 진단 정보 복사"), command=self._copy_diagnostics, state="disabled")
+        self.copy_btn.grid(row=4, column=0, columnspan=2, sticky="w", pady=(12, 0))
 
         self._poll()
         self.refresh()
@@ -69,12 +73,23 @@ class SetupWizard:
                 self._busy = False
                 self.action_btn.configure(state="normal")
                 if kind == "scan":
-                    if isinstance(result, Exception):
+                    devices, error = result
+                    self._diagnostic_text = report_text(build_report(devices, error))
+                    self.copy_btn.configure(state="normal")
+                    if error:
                         self.status_var.set(t("동글을 검색하지 못했습니다. 다시 시도해 주세요."))
-                        self._log(str(result))
+                        self._dongle = None
+                        self._log(error)
                         self._set_action(t("다시 검색"), self.refresh)
                     else:
-                        self._dongle = result
+                        candidates = driver.list_dongles(devices=devices)
+                        self._dongle = next((d for d in candidates if d.vidpid in driver.KNOWN_DONGLES), candidates[0] if candidates else None)
+                        self._log(t("USB 장치 {count}개, Bluetooth 후보 {adapters}개", count=len(devices), adapters=len(candidates)))
+                        if not candidates:
+                            for entry in devices:
+                                match = driver._VIDPID_RE.match(entry.get("InstanceId") or "")
+                                if match:
+                                    self._log(f"USB {match[1]}:{match[2]} · {entry.get('FriendlyName') or ''} · {entry.get('Class') or ''} · {entry.get('Service') or ''}")
                         self._show_dongle()
                 else:
                     self._after(*result)
@@ -87,14 +102,20 @@ class SetupWizard:
             return
         self._busy = True
         self.action_btn.configure(state="disabled")
+        self.copy_btn.configure(state="disabled")
         self.status_var.set(t("USB 블루투스 동글을 찾고 있습니다…"))
         def worker():
             try:
-                result = driver.find_dongle()
+                result = (driver._pnp_query(), None)
             except Exception as exc:
-                result = exc
+                result = ([], str(exc))
             self._results.put(("scan", result))
         threading.Thread(target=worker, daemon=True).start()
+
+    def _copy_diagnostics(self):
+        self.win.clipboard_clear()
+        self.win.clipboard_append(self._diagnostic_text)
+        self._log(t("USB 진단 정보를 복사했습니다."))
 
     def _show_dongle(self):
         if self._dongle is None:
@@ -114,6 +135,9 @@ class SetupWizard:
                 "iPad의 설정 → Bluetooth에서 페어링할 수 있습니다.", name=d.label)
             )
             self._set_action(t("일반 Bluetooth로 복원"), self._restore)
+        elif d.driver == "unknown":
+            self.status_var.set(t("{name}: 장치는 발견했지만 드라이버를 확인하지 못했습니다. USB 진단 정보를 복사해 주세요.", name=d.label))
+            self._set_action(t("다시 검색"), self.refresh)
         else:
             self.status_var.set(
                 t("{name} · 기본 Bluetooth 드라이버 사용 중\n\n"

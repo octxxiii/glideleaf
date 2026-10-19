@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- USB enumeration now uses explicit UTF-8 and actual driver service/HCI IDs,
+  with a CIM query and a PnP fallback. Scan failures are surfaced separately
+  from an empty result; generic USBDevice nodes no longer imply WinUSB.
+- Added copyable USB diagnostics to adapter setup, a `--diagnose` CLI, and a
+  standalone PowerShell report for the affected PC. No driver changes are made.
+- HID keyboard/mouse receivers are excluded from Bluetooth-radio candidates.
+
 ## 0.1.0 — source preview
 
 First Glideleaf source publication, derived from fuba/winuc.

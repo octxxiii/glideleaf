@@ -113,6 +113,10 @@ BLE 서비스가 중단되었습니다:\n\n{error}|The BLE service stopped:\n\n{
 알 수 없는 오류|Unknown error|不明なエラー|未知错误|未知錯誤|Error desconocido|Erreur inconnue|Unbekannter Fehler|Erro desconhecido
 지원하지 않는 언어입니다.|Unsupported language.|対応していない言語です。|不支持此语言。|不支援此語言。|Idioma no compatible.|Langue non prise en charge.|Nicht unterstützte Sprache.|Idioma não suportado.
 숫자 입력을 확인해 주세요.|Check the numeric values.|数値の入力を確認してください。|请检查数字输入。|請檢查數字輸入。|Revisa los valores numéricos.|Vérifiez les valeurs numériques.|Prüfen Sie die Zahlenwerte.|Verifique os valores numéricos.
+USB 진단 정보 복사|Copy USB diagnostics|USB診断情報をコピー|复制 USB 诊断信息|複製 USB 診斷資訊|Copiar diagnóstico USB|Copier le diagnostic USB|USB-Diagnose kopieren|Copiar diagnóstico USB
+USB 진단 정보를 복사했습니다.|USB diagnostics copied.|USB診断情報をコピーしました。|已复制 USB 诊断信息。|已複製 USB 診斷資訊。|Diagnóstico USB copiado.|Diagnostic USB copié.|USB-Diagnose kopiert.|Diagnóstico USB copiado.
+{name}: 장치는 발견했지만 드라이버를 확인하지 못했습니다. USB 진단 정보를 복사해 주세요.|{name}: device found, but driver binding is unknown. Please copy USB diagnostics.|{name}: デバイスは見つかりましたが、ドライバーを確認できません。USB診断情報をコピーしてください。|{name}：已找到设备，但无法确认驱动绑定。请复制 USB 诊断信息。|{name}：已找到裝置，但無法確認驅動程式綁定。請複製 USB 診斷資訊。|{name}: dispositivo encontrado, pero no se conoce el controlador. Copia el diagnóstico USB.|{name} : appareil trouvé, mais pilote inconnu. Copiez le diagnostic USB.|{name}: Gerät gefunden, Treiberbindung unbekannt. Bitte USB-Diagnose kopieren.|{name}: dispositivo encontrado, mas o driver é desconhecido. Copie o diagnóstico USB.
+USB 장치 {count}개, Bluetooth 후보 {adapters}개|{count} USB nodes, {adapters} Bluetooth candidates|USBノード {count}件、Bluetooth候補 {adapters}件|{count} 个 USB 节点，{adapters} 个蓝牙候选设备|{count} 個 USB 節點，{adapters} 個藍牙候選裝置|{count} nodos USB, {adapters} candidatos Bluetooth|{count} nœuds USB, {adapters} candidats Bluetooth|{count} USB-Knoten, {adapters} Bluetooth-Kandidaten|{count} nós USB, {adapters} candidatos Bluetooth
 """
 
 _CODES = ("ko", "en", "ja", "zh-Hans", "zh-Hant", "es", "fr", "de", "pt-BR")

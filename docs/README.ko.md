@@ -30,6 +30,21 @@ iPad의 **설정 → Bluetooth → Windows Pointer & Keyboard**에서 페어링�
 기존 사용자 설정·페어링은 `%LOCALAPPDATA%\WinUC`에 유지됩니다.
 삭제 전 동글 설정 화면에서 해당 동글을 일반 Bluetooth로 복원하세요.
 
+## 동글이 검색되지 않을 때
+
+문제가 발생하는 PC에서 **동글 설정 / 복원 → USB 진단 정보 복사**를 누르세요.
+검색 실패와 실제 장치 없음은 구분해서 표시하며, 진단에는 USB 식별자·분류·드라이버 서비스가 포함됩니다.
+장치 일련번호 뒤쪽과 페어링 키·입력 로그는 수집하지 않습니다.
+
+Python 없이도 다음 명령으로 해당 PC의 진단 정보를 복사할 수 있습니다.
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/diagnose_usb.ps1 -Copy
+```
+
+또는 `python -m glideleaf --diagnose usb-diagnostics.json`으로 저장할 수 있습니다.
+동글 모델명과 함께 검토한 진단 결과를 전달해 주세요. 이 작업은 드라이버를 변경하지 않습니다.
+
 ## fuba님께 감사드립니다
 
 [WinUC](https://github.com/fuba/winuc)를 만들고 공개해 주신 fuba님께 감사드립니다.

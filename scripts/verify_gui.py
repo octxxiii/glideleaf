@@ -86,11 +86,14 @@ def main(language="ko"):
     assert saved[0].language == "ja" and saved[0].button_actions == {"x1": "wheel_up"}
     assert app.config.speed == 1 and app.config.edge == "right"
 
-    with patch("winuc.gui.setup_wizard.driver.find_dongle", return_value=None):
+    with patch("winuc.gui.setup_wizard.driver._pnp_query", return_value=[]):
         wizard = SetupWizard(root)
         settle(root)
         assert not wizard._busy
         assert wizard.status_var.get() == t("USB 블루투스 동글을 찾지 못했습니다.\n지원 동글을 연결하고 다시 검색하세요. Realtek RTL8761B 계열을 권장합니다.")
+        with patch.object(wizard.win, "clipboard_clear"), patch.object(wizard.win, "clipboard_append") as clipboard:
+            wizard._copy_diagnostics()
+            assert '"usb_node_count": 0' in clipboard.call_args.args[0]
         capture(wizard.win, f"setup-{language}.png")
         wizard.refresh()
         wizard._close()

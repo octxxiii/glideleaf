@@ -71,7 +71,7 @@ def main() -> int:
     parser.add_argument("--pid", default=None, help=argparse.SUPPRESS)
     args = parser.parse_args()
 
-    _setup_logging(args.verbose, to_file=args.tray)
+    _setup_logging(args.verbose, to_file=args.tray or args.driver_install or args.driver_restore)
 
     if args.diagnose is not None:
         from .diagnostics import collect_report, report_text
@@ -101,8 +101,8 @@ def main() -> int:
                 driver.install_winusb_elevated(vid, pid)
             else:
                 driver.restore_inbox_elevated(vid, pid)
-        except Exception as exc:  # surfaced to caller via exit code
-            print(f"driver operation failed: {exc}", file=sys.stderr)
+        except Exception:  # A windowless UAC child has no usable stderr.
+            logging.getLogger(__name__).exception("Driver operation failed")
             return 1
         return 0
 

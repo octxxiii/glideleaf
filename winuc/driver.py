@@ -392,6 +392,10 @@ def _relaunch_elevated(args: list[str], wait: bool = True) -> int:
     info.lpVerb = "runas"
     info.lpFile = exe
     info.lpParameters = params
+    # UAC may start a source checkout in System32, where `-m winuc` cannot
+    # resolve our package. Use the package root explicitly.
+    info.lpDirectory = str(Path(sys.executable).resolve().parent if getattr(sys, "frozen", False)
+                           else Path(__file__).resolve().parent.parent)
     info.nShow = 0  # SW_HIDE
     if not ctypes.windll.shell32.ShellExecuteExW(ctypes.byref(info)):
         raise OSError("elevation was cancelled or failed")
@@ -405,6 +409,12 @@ def _relaunch_elevated(args: list[str], wait: bool = True) -> int:
 
 
 def install_winusb_elevated(vid: int, pid: int, name: str = "Glideleaf Bluetooth") -> None:
+    # Check before UAC so a missing optional tool is not hidden behind exit 1.
+    if wdi_simple_path() is None:
+        raise FileNotFoundError(
+            "wdi-simple.exe not found. Automatic driver installation is unavailable. "
+            "Use Zadig (https://zadig.akeo.ie/) to install WinUSB for the selected dongle."
+        )
     if is_admin():
         install_winusb(vid, pid, name)
         return
@@ -412,7 +422,8 @@ def install_winusb_elevated(vid: int, pid: int, name: str = "Glideleaf Bluetooth
         ["--driver-install", "--vid", f"0x{vid:04X}", "--pid", f"0x{pid:04X}"]
     )
     if code != 0:
-        raise RuntimeError(f"elevated driver install failed (exit {code})")
+        from .paths import log_path
+        raise RuntimeError(f"elevated driver install failed (exit {code}). Details: {log_path()}")
 
 
 def restore_inbox_elevated(vid: int, pid: int) -> None:
@@ -423,4 +434,5 @@ def restore_inbox_elevated(vid: int, pid: int) -> None:
         ["--driver-restore", "--vid", f"0x{vid:04X}", "--pid", f"0x{pid:04X}"]
     )
     if code != 0:
-        raise RuntimeError(f"elevated driver restore failed (exit {code})")
+        from .paths import log_path
+        raise RuntimeError(f"elevated driver restore failed (exit {code}). Details: {log_path()}")

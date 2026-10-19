@@ -13,6 +13,7 @@ from dataclasses import replace
 
 import logging
 import queue
+import threading
 import tkinter as tk
 from tkinter import messagebox
 from typing import Callable
@@ -136,11 +137,30 @@ class TrayApp:
         if self.service.running:
             self.service.stop()
         else:
-            if not self._has_adapter_choice():
-                self._open_wizard()
-                return
-            self.service.start(self.config)
+            self._start_service()
         self._on_main(self._refresh_icon)
+
+    def _start_service(self) -> None:
+        # Run on a worker: PnP discovery can take seconds. Driver setup is a
+        # normal prerequisite, not a BLE service crash. Keep the app's own
+        # validation as a final guard against unplugging after this check.
+        config = self.config
+        if not self._has_adapter_choice():
+            self._open_wizard()
+            return
+        if config.adapter_id:
+            try:
+                driver.require_selected_adapter(config.adapter_id, config.transport)
+            except RuntimeError as exc:
+                self._open_wizard()
+                message = str(exc)
+                self._on_main(lambda: messagebox.showinfo(
+                    t("동글 설정 / 복원…"), message, parent=self.root))
+                return
+        if config != self.config:
+            # The user applied another choice while discovery was running.
+            return
+        self.service.start(config)
 
     def _open_dashboard(self, _icon=None, _item=None) -> None:
         def show():
@@ -281,11 +301,7 @@ class TrayApp:
         if first_run:
             self._open_wizard()
         elif autostart_service:
-            if self._has_adapter_choice():
-                self.service.start(self.config)
-                self._refresh_icon()
-            else:
-                self._open_wizard()
+            threading.Thread(target=self._start_service, daemon=True).start()
         try:
             self.root.mainloop()
         finally:

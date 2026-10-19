@@ -222,3 +222,31 @@ def test_gui_start_opens_picker_instead_of_default_usb_index(tmp_path):
     app.config.transport = "usb:1234:5678"
     app._toggle_running()
     app.service.start.assert_called_once_with(app.config)
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows app")
+@pytest.mark.parametrize("service", ["BTHUSB", "WinUSB", "missing"])
+def test_start_checks_selected_csr_before_starting_ble(tmp_path, monkeypatch, service):
+    csr = radio(0x0A12, 0x0001, "csr-port", "BTHUSB")
+    selected = driver.list_dongles(devices=[csr])[0]
+    app = make_tray(tmp_path)
+    app.config = replace(app.config, adapter_id=selected.identity, transport=selected.transport)
+    app._open_wizard = Mock()
+    monkeypatch.setattr(driver, "_pnp_query", lambda: (
+        [] if service == "missing" else [{**csr, "Service": service}]))
+    info = Mock()
+    monkeypatch.setattr("winuc.gui.tray.messagebox.showinfo", info)
+    app.root = Mock()
+    app._toggle_running()
+    if service == "WinUSB":
+        app.service.start.assert_called_once_with(app.config)
+        app._open_wizard.assert_not_called()
+    else:
+        app.service.start.assert_not_called()
+        app._open_wizard.assert_called_once()
+        # Execute queued UI work on the UI side, as production does.
+        for call in app._on_main.call_args_list:
+            call.args[0]()
+        info.assert_called_once()
+        if service == "BTHUSB":
+            assert "WinUSB" in info.call_args.args[1]

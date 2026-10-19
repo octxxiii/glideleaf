@@ -10,6 +10,7 @@ from typing import Callable
 from .. import driver
 from ..diagnostics import build_report, report_text
 from ..i18n import t
+from ..native_driver import RebootRequired
 from .theme import configure, font_family
 
 
@@ -17,10 +18,12 @@ class SetupWizard:
     def __init__(self, root: tk.Tk, on_done: Callable[[], None] | None = None,
                  *, on_apply: Callable[[driver.Dongle], None] | None = None,
                  active_adapter_id: str = "",
-                 prepare_driver: Callable[[driver.Dongle], None] | None = None) -> None:
+                 prepare_driver: Callable[[driver.Dongle], None] | None = None,
+                 on_ready: Callable[[], None] | None = None) -> None:
         configure(root)
         self.on_done, self.on_apply = on_done, on_apply
         self.prepare_driver = prepare_driver
+        self.on_ready = on_ready
         self._active_adapter_id = active_adapter_id
         self._preview_id = active_adapter_id
         self._results = queue.SimpleQueue()
@@ -41,7 +44,7 @@ class SetupWizard:
         frm.columnconfigure(0, weight=1)
         frm.rowconfigure(2, weight=1)
         ttk.Label(frm, text=t("전용 동글 연결하기"), font=(font_family(), 16, "bold")).grid(row=0, column=0, sticky="w", pady=(0, 8))
-        ttk.Label(frm, text=t("목록에서 사용할 어댑터를 선택한 뒤 적용하세요. 드라이버 전환은 별도 버튼으로 진행합니다."), wraplength=850).grid(row=1, column=0, sticky="w", pady=(0, 14))
+        ttk.Label(frm, text=t("목록에서 동글을 선택하고 동글 연결을 누르세요. 이미 준비된 동글은 적용 후 바로 사용할 수 있습니다."), wraplength=850).grid(row=1, column=0, sticky="w", pady=(0, 14))
         table_frame = ttk.Frame(frm)
         table_frame.grid(row=2, column=0, sticky="nsew")
         table_frame.columnconfigure(0, weight=1)
@@ -65,7 +68,7 @@ class SetupWizard:
         actions.grid(row=5, column=0, sticky="ew")
         self.apply_btn = ttk.Button(actions, text=t("선택한 동글 적용"), command=self._apply_selected, state="disabled", style="Primary.TButton")
         self.apply_btn.pack(side="left")
-        self.action_btn = ttk.Button(actions, text=t("WinUSB로 전환"), command=self._install, state="disabled")
+        self.action_btn = ttk.Button(actions, text=t("동글 연결"), command=self._install, state="disabled")
         self.action_btn.pack(side="left", padx=8)
         self.refresh_btn = ttk.Button(actions, text=t("다시 검색"), command=self.refresh)
         self.refresh_btn.pack(side="left")
@@ -165,6 +168,8 @@ class SetupWizard:
                         messagebox.showerror("Glideleaf", error, parent=self.win)
                     else:
                         self._log(done)
+                        if kind == "reboot":
+                            messagebox.showinfo("Glideleaf", done, parent=self.win)
                     self.refresh()
         except queue.Empty:
             pass
@@ -204,8 +209,8 @@ class SetupWizard:
         elif d.driver == "unknown":
             self.status_var.set(t("{name}: 장치는 발견했지만 드라이버를 확인하지 못했습니다. USB 진단 정보를 복사해 주세요.", name=d.label))
         else:
-            self.status_var.set(t("{name}: Windows Bluetooth 사용 중. 동글 적용 후 WinUSB로 전환하세요. 전환 중에는 이 동글의 일반 Bluetooth 기능을 사용할 수 없습니다.", name=d.label))
-            self.action_btn.configure(text=t("WinUSB로 전환"), command=self._install)
+            self.status_var.set(t("{name}: Windows Bluetooth 사용 중. 동글 연결을 누르면 설정과 연결을 진행합니다. 복원하기 전까지 이 동글의 일반 Bluetooth 기능을 사용할 수 없습니다.", name=d.label))
+            self.action_btn.configure(text=t("동글 연결"), command=self._install)
         self._controls()
 
     def _apply_selected(self):
@@ -228,26 +233,38 @@ class SetupWizard:
         d = self._dongle
         if d is None or self._busy or self._ambiguous():
             return
-        if not messagebox.askyesno(t("동글 드라이버 전환"), t("{name}을 WinUSB로 전환할까요?\n\n복원하기 전까지 이 동글의 일반 Bluetooth 기능을 사용할 수 없습니다.", name=d.label) + "\n\n" + t("공식 Zadig를 자동 다운로드하고 파일 해시와 Akeo Consulting 서명을 검증합니다.") + "\n\n" + t("공식 Zadig 창에서 USB ID {usb_id}인 동글과 WinUSB를 선택해 설치를 확인하세요.", usb_id=f"{d.vid:04X}:{d.pid:04X}"), parent=self.win):
+        if not messagebox.askyesno(t("동글 드라이버 전환"), t("{name}을 WinUSB로 전환할까요?\n\n복원하기 전까지 이 동글의 일반 Bluetooth 기능을 사용할 수 없습니다.", name=d.label) + "\n\n" + t("USB ID {usb_id}인 선택한 동글을 앱에서 설정하고 연결합니다. Windows 관리자 권한 요청을 확인해 주세요.", usb_id=f"{d.vid:04X}:{d.pid:04X}"), parent=self.win):
             return
-        self._run_driver(d, lambda: driver.install_winusb_elevated(d.vid, d.pid), t("공식 설치 도구 준비 중… Zadig 창에서 설치를 완료하고 닫아 주세요."), t("전환 완료. 동글을 다시 검색합니다…"))
+        def action():
+            if self.on_apply is not None:
+                self.on_apply(d)
+            driver.install_winusb_elevated(d.vid, d.pid, adapter_id=d.identity)
+            if self.on_ready is not None:
+                self.on_ready()
+        from ..native_driver import prepare_package
+        self._run_driver(d, action, t("선택한 동글을 설정하고 있습니다… Windows 관리자 권한 요청을 확인하세요."), t("동글 설정을 완료했습니다. 연결 상태를 확인해 주세요."), preflight=lambda: prepare_package(d.vid, d.pid))
 
     def _restore(self) -> None:
         d = self._dongle
         if d is None or self._busy or self._ambiguous():
             return
-        self._run_driver(d, lambda: driver.restore_inbox_elevated(d.vid, d.pid), t("기존 Bluetooth 드라이버로 복원 중…"), t("복원을 요청했습니다. 동글을 다시 검색합니다…"))
+        self._run_driver(d, lambda: driver.restore_inbox_elevated(d.vid, d.pid, adapter_id=d.identity), t("기존 Bluetooth 드라이버로 복원 중…"), t("복원을 요청했습니다. 동글을 다시 검색합니다…"))
 
-    def _run_driver(self, dongle, action, busy, done):
+    def _run_driver(self, dongle, action, busy, done, *, preflight=None):
         self._busy = True
         self._controls()
         self.status_var.set(busy)
         def worker():
             error = None
             try:
+                if preflight is not None:
+                    preflight()
                 if self.prepare_driver is not None:
                     self.prepare_driver(dongle)
                 action()
+            except RebootRequired as exc:
+                self._results.put(("reboot", (None, str(exc))))
+                return
             except Exception as exc:
                 error = str(exc)
             self._results.put(("operation", (error, done)))

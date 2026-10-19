@@ -11,6 +11,11 @@ firmware/
 
 # WinUSB installer tool (fetched via scripts/fetch_wdi.ps1; LGPL, not vendored)
 tools/
+driver-packages/
+*.pfx
+*.p12
+*.key
+*.pvk
 
 # Build artifacts
 build/

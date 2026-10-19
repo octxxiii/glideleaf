@@ -190,7 +190,8 @@ class TrayApp:
     def _make_wizard(self) -> SetupWizard:
         return SetupWizard(self.root, on_apply=self._apply_dongle,
                            active_adapter_id=self.config.adapter_id,
-                           prepare_driver=self._prepare_adapter_driver)
+                           prepare_driver=self._prepare_adapter_driver,
+                           on_ready=self._start_service)
 
     def _apply_dongle(self, selected: driver.Dongle) -> None:
         # Called by the wizard worker, never change Tk widgets here.

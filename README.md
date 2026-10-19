@@ -55,39 +55,36 @@ The original `python -m winuc` entry point is retained for compatibility. `pytho
 ### Set up the adapter
 
 The setup window lists detected Bluetooth adapters with their USB ID, driver,
-USB location and applied status. **Select a row, then click Apply selected
-adapter.** Clicking a row only previews the device; applying saves the specific
-adapter and its VID/PID transport. Reopening setup restores that choice.
-With the default unconfigured transport, the GUI opens this picker instead of
-automatically connecting to USB index 0. Explicit legacy/manual transports remain supported.
+USB location and applied status. Select a row and click **Connect adapter** to
+save that choice and perform native setup. Clicking a row only previews it.
+For an adapter already using WinUSB, **Apply selected adapter** saves the
+selection without changing drivers; then start the connection from the panel.
 
-If the selected adapter still uses Windows Bluetooth, use **Switch to WinUSB**
-as a separate step. Applying a selection never changes drivers. A running
-connection is moved to the applied adapter only if it is WinUSB-ready; otherwise
-it stops until setup is completed. Missing or ambiguous saved selections fail
-explicitly rather than opening the first available adapter.
+Reopening setup restores the saved choice. With the default unconfigured
+transport, the GUI opens this picker instead of automatically connecting to USB
+index 0. Missing or ambiguous saved selections never fall back to another radio.
+Explicit legacy/manual transports remain supported.
 
 ![Glideleaf adapter list with separate selection, apply and driver controls](docs/images/adapter-picker-en.png)
 
 *Actual desktop UI with two simulated adapters; not physical-device qualification.*
 
-Confirm **Switch to WinUSB** to download and verify the **official signed
-Zadig 2.9** installer. Glideleaf checks both SHA-256 and the Windows Authenticode
-signature of **Akeo Consulting**, including before cached tools are launched.
-No separate browser download is required. The earlier unsigned community CLI
-is no longer used by this GUI flow.
+Select your adapter and click **Connect adapter**. The app-owned setup helper
+saves the selection, requests Windows administrator approval, installs its
+hardware-specific signed WinUSB package through Windows APIs, verifies the
+binding and starts the connection. No Zadig window or third-party installer
+download is used. **Adapter setup / restore** restores normal Bluetooth use.
 
-In the official Zadig window, **select the adapter with the USB ID shown by
-Glideleaf, choose WinUSB and confirm installation**. Administrator approval is
-required. Glideleaf verifies the actual WinUSB binding after Zadig closes;
-closing the window alone does not count as success. This is automatic tool
-preparation with an explicit final device/install confirmation, not unattended
-installation. See [installer provenance and verification](docs/DRIVER_TOOL.md).
+**Native installation is not release-ready yet:** this checkout does not contain
+production-signed driver catalogs or a signed app. Source/development builds
+stop before UAC when the package is missing or untrusted. Adapters already bound
+to WinUSB can still be applied and used. A reboot request is reported separately;
+process exit alone never counts as successful driver installation.
 
-Security blocks stop setup; the app does not change antivirus settings or add
-exclusions. Official signing does not guarantee acceptance by every policy.
-Restore the selected adapter through **Adapter setup / restore** before
-uninstalling. Do not switch an adapter used by your only keyboard or mouse.
+See [native setup and signing](docs/DRIVER_TOOL.md). Release builds require signed
+packages and a valid application publisher signature. Physical CSR/iPad setup,
+restore and reconnect qualification is still outstanding. Do not change an
+adapter used by your only keyboard or mouse.
 
 Multiple adapters with the same USB VID/PID are shown separately, but the current
 transport/driver operations cannot safely distinguish them. Keep just the one

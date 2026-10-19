@@ -63,15 +63,35 @@ def main() -> int:
                         help="Read-only USB diagnostics as JSON (stdout, or the given file)")
     parser.add_argument("--no-capture", action="store_true",
                         help="Start BLE only, without input hooks (for pairing checks)")
+    parser.add_argument("--driver-check", nargs="?", const="-", metavar="FILE",
+                        help="Read-only native driver package signature/readiness check")
     parser.add_argument("--verbose", "-v", action="store_true")
     # Elevated driver verbs (invoked by the GUI via UAC; not for normal use).
     parser.add_argument("--driver-install", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--driver-restore", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--vid", default=None, help=argparse.SUPPRESS)
     parser.add_argument("--pid", default=None, help=argparse.SUPPRESS)
+    parser.add_argument("--adapter-id", default=None, help=argparse.SUPPRESS)
+    parser.add_argument("--driver-result", default=None, help=argparse.SUPPRESS)
+    parser.add_argument("--driver-language", default="auto", help=argparse.SUPPRESS)
     args = parser.parse_args()
 
     _setup_logging(args.verbose, to_file=args.tray or args.driver_install or args.driver_restore)
+
+    if args.driver_check is not None:
+        import json
+        from .native_driver import readiness
+        report = readiness()
+        output = json.dumps(report, ensure_ascii=False, indent=2)
+        destination = args.driver_check
+        if destination == "-" and getattr(sys, "frozen", False):
+            from .paths import data_dir
+            destination = str(data_dir() / "driver-readiness.json")
+        if destination == "-":
+            print(output)
+        else:
+            Path(destination).write_text(output, encoding="utf-8")
+        return 0 if report["ready"] else 1
 
     if args.diagnose is not None:
         from .diagnostics import collect_report, report_text
@@ -90,21 +110,42 @@ def main() -> int:
     # --- Elevated driver operations (run in a short-lived elevated process) ---
     if args.driver_install or args.driver_restore:
         from . import driver
-
-        vid = int(args.vid, 0)
-        pid = int(args.pid, 0)
+        from .native_driver import RebootRequired, REBOOT_EXIT_CODE
+        from .i18n import set_language
+        import json
+        set_language(args.driver_language)
+        operation = "install" if args.driver_install else "restore"
+        code, error = 0, None
+        result_file = None
         try:
-            # Use the *_elevated variants so this works whether or not the
-            # caller (GUI, or the uninstaller) is already elevated: they run
-            # directly if admin, else re-launch with a single UAC prompt.
+            if args.driver_result:
+                result_file = driver.driver_result_path(args.driver_result)
+            vid, pid = int(args.vid, 0), int(args.pid, 0)
+            if not driver.is_admin():
+                raise PermissionError("Driver helper requires administrator approval")
+            selected = driver._selected_target(vid, pid, args.adapter_id)
             if args.driver_install:
-                driver.install_winusb_elevated(vid, pid)
+                driver.install_winusb(vid, pid, adapter_id=selected.identity)
             else:
-                driver.restore_inbox_elevated(vid, pid)
-        except Exception:  # A windowless UAC child has no usable stderr.
+                driver._check_native_target(selected)
+                driver.restore_inbox(vid, pid)
+        except RebootRequired as exc:
+            code, error = REBOOT_EXIT_CODE, str(exc)
+        except Exception as exc:  # A windowless UAC child has no usable stderr.
             logging.getLogger(__name__).exception("Driver operation failed")
-            return 1
-        return 0
+            code, error = 1, str(exc)
+        if result_file is not None:
+            try:
+                # Exclusive create: never overwrite a pre-existing/symlinked file
+                # based on arguments received by the elevated process.
+                with result_file.open("x", encoding="utf-8") as output:
+                    output.write(json.dumps({
+                        "operation": operation, "adapter_id": args.adapter_id,
+                        "error": error, "reboot_required": code == REBOOT_EXIT_CODE,
+                    }, ensure_ascii=False))
+            except OSError:
+                logging.getLogger(__name__).exception("Could not write driver result")
+        return code
 
     config_file = Path(args.config) if args.config else config_path()
     config = Config.load(config_file)

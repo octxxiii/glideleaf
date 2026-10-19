@@ -130,16 +130,17 @@ def test_list_select_apply_persists_exact_choice_and_restores_it(tmp_path, monke
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Windows desktop UI")
-def test_driver_action_targets_preview_only_and_does_not_apply(monkeypatch, desktop_root):
+def test_connect_action_targets_preview_then_applies_and_starts(monkeypatch, desktop_root):
     import tkinter as tk
     from winuc.gui.setup_wizard import SetupWizard
     records = [INTEL, {**REALTEK, "Service": "BTHUSB"}]
     monkeypatch.setattr(driver, "_pnp_query", lambda: records)
-    install, apply = Mock(), Mock()
+    install, apply, ready = Mock(), Mock(), Mock()
+    monkeypatch.setattr("winuc.native_driver.prepare_package", Mock())
     monkeypatch.setattr(driver, "install_winusb_elevated", install)
     monkeypatch.setattr("winuc.gui.setup_wizard.messagebox.askyesno", lambda *args, **kwargs: True)
     root = desktop_root
-    wizard = SetupWizard(root, on_apply=apply)
+    wizard = SetupWizard(root, on_apply=apply, on_ready=ready)
     try:
         root.after(300, root.quit)
         root.mainloop()
@@ -148,8 +149,9 @@ def test_driver_action_targets_preview_only_and_does_not_apply(monkeypatch, desk
         wizard.action_btn.invoke()
         root.after(300, root.quit)
         root.mainloop()
-        install.assert_called_once_with(0x0BDA, 0x8771)
-        apply.assert_not_called()
+        install.assert_called_once_with(0x0BDA, 0x8771, adapter_id=wizard._dongle.identity)
+        apply.assert_called_once()
+        ready.assert_called_once()
     finally:
         wizard._close()
 
@@ -250,3 +252,35 @@ def test_start_checks_selected_csr_before_starting_ble(tmp_path, monkeypatch, se
         info.assert_called_once()
         if service == "BTHUSB":
             assert "WinUSB" in info.call_args.args[1]
+
+
+@pytest.mark.parametrize("failure", ["package", "save"])
+def test_connect_failure_never_installs_or_starts(monkeypatch, desktop_root, failure):
+    from winuc.gui.setup_wizard import SetupWizard
+    monkeypatch.setattr(driver, "_pnp_query", lambda: [INTEL])
+    preflight = Mock(side_effect=RuntimeError("untrusted") if failure == "package" else None)
+    monkeypatch.setattr("winuc.native_driver.prepare_package", preflight)
+    monkeypatch.setattr("winuc.gui.setup_wizard.messagebox.askyesno", lambda *a, **k: True)
+    monkeypatch.setattr("winuc.gui.setup_wizard.messagebox.showerror", Mock())
+    install, ready, prepare = Mock(), Mock(), Mock()
+    apply = Mock(side_effect=OSError("disk full") if failure == "save" else None)
+    monkeypatch.setattr(driver, "install_winusb_elevated", install)
+    wizard = SetupWizard(desktop_root, on_apply=apply, on_ready=ready, prepare_driver=prepare)
+    def settle():
+        desktop_root.after(300, desktop_root.quit)
+        desktop_root.mainloop()
+    try:
+        settle()
+        wizard.devices.selection_set("0")
+        desktop_root.update()
+        wizard.action_btn.invoke()
+        settle()
+        install.assert_not_called()
+        ready.assert_not_called()
+        if failure == "package":
+            prepare.assert_not_called()
+            apply.assert_not_called()
+        else:
+            apply.assert_called_once()
+    finally:
+        wizard._close()

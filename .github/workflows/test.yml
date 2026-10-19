@@ -35,5 +35,7 @@ jobs:
         run: python -m pytest -q
       - name: Validate public entry point without hardware
         run: python -m glideleaf --selftest
+      - name: Generate native driver INF sources without installing drivers
+        run: python scripts/prepare_native_drivers.py --templates-only
       - name: Compile modules
         run: python -m compileall -q winuc glideleaf scripts packaging/launcher.py

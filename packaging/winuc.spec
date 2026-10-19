@@ -2,10 +2,11 @@
 # Build:  pyinstaller packaging/winuc.spec  (run from the repo root)
 
 from pathlib import Path
+import os
 
 from PyInstaller.utils.hooks import collect_submodules, collect_data_files
 
-ROOT = Path.cwd()
+ROOT = Path(SPECPATH).parent
 
 hiddenimports = (
     collect_submodules("bumble")
@@ -16,6 +17,16 @@ hiddenimports = (
 
 datas = [(str(ROOT / "LICENSE"), "."), (str(ROOT / "THIRD_PARTY_NOTICES.md"), ".")]
 datas += [(str(ROOT / "winuc" / "licenses"), "winuc/licenses")]
+driver_packages = os.environ.get("GLIDELEAF_DRIVER_PACKAGES")
+if driver_packages:
+    import sys
+    sys.path.insert(0, str(ROOT))
+    from winuc.native_driver import readiness
+    package_root = Path(driver_packages).resolve()
+    status = readiness(root=package_root)
+    if not status["ready"]:
+        raise RuntimeError(f"Native driver packages are not release-ready: {status}")
+    datas += [(str(package_root), "driver-packages")]
 notices = ROOT / "build" / "licenses"
 if not (notices / "dependencies.json").is_file():
     raise RuntimeError("Run python scripts/collect_licenses.py before packaging")

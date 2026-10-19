@@ -1,57 +1,71 @@
-﻿# Build the WinUC installer end to end.
-#
-#   packaging\build.ps1
-#
-# Steps: ensure venv deps + PyInstaller, fetch firmware + wdi-simple, run
-# PyInstaller (dist\Glideleaf), then compile the Inno Setup installer if ISCC is
-# available (dist\installer\Glideleaf-Setup-*.exe).
-
+# Build a development portable app, or a signed native-driver release.
+param(
+    [switch]$Release,
+    [string]$DriverPackageDir,
+    [string]$CertificateThumbprint,
+    [string]$Publisher,
+    [string]$SignToolPath,
+    [string]$TimestampUrl = 'http://timestamp.digicert.com',
+    [switch]$SkipInstallDependencies,
+    [switch]$FetchFirmware
+)
 $ErrorActionPreference = "Stop"
-$root = Split-Path $PSScriptRoot -Parent
-Set-Location $root
-
-$py = Join-Path $root ".venv\Scripts\python.exe"
-if (-not (Test-Path $py)) { throw "venv not found; run: python -m venv .venv; .venv\Scripts\pip install -r requirements.txt" }
-
-Write-Host "[1/5] Installing build dependencies..." -ForegroundColor Cyan
-& $py -m pip install --quiet --disable-pip-version-check -r requirements.txt pyinstaller
-if ($LASTEXITCODE -ne 0) { throw "Build dependencies failed" }
-& $py (Join-Path $root "scripts\collect_licenses.py")
-if ($LASTEXITCODE -ne 0) { throw "License collection failed" }
-
-Write-Host "[2/5] Fetching Realtek firmware..." -ForegroundColor Cyan
-New-Item -ItemType Directory -Force (Join-Path $root "firmware") | Out-Null
-& (Join-Path $root ".venv\Scripts\bumble-rtk-fw-download.exe") --output-dir (Join-Path $root "firmware")
-if ($LASTEXITCODE -ne 0) { throw "Firmware download failed" }
-
-Write-Host "[3/5] Checking for wdi-simple.exe (WinUSB installer)..." -ForegroundColor Cyan
-# Not auto-downloaded: bundling wdi-simple.exe (libwdi, LGPL-3.0) in a
-# redistributable build requires LGPL compliance (license text + source link).
-# To include it deliberately, run scripts\fetch_wdi.ps1 (or drop a self-built
-# wdi-simple.exe into tools\) BEFORE building. Absent => automatic driver
-# switching is disabled; the setup wizard falls back to manual Zadig.
-if (Test-Path (Join-Path $root "tools\wdi-simple.exe")) {
-    Write-Host "  Found tools\wdi-simple.exe -> automatic WinUSB switching enabled." -ForegroundColor Green
-} else {
-    Write-Host "  tools\wdi-simple.exe not present -> shipping without auto driver switch." -ForegroundColor Yellow
+$repo = Split-Path $PSScriptRoot -Parent
+$python = Join-Path $repo '.venv\Scripts\python.exe'
+if (-not (Test-Path -LiteralPath $python)) { throw "Create .venv and install requirements-dev.txt first." }
+Push-Location $repo
+$previousPackages = $env:GLIDELEAF_DRIVER_PACKAGES
+try {
+    if ($Release) {
+        if (-not $DriverPackageDir -or -not $CertificateThumbprint -or -not $Publisher) {
+            throw "Release needs signed DriverPackageDir, CertificateThumbprint and Publisher. No unsigned fallback."
+        }
+        $DriverPackageDir = (Resolve-Path -LiteralPath $DriverPackageDir).Path
+        if ($CertificateThumbprint -notmatch '^[0-9a-fA-F]{40}$') { throw "Invalid certificate thumbprint." }
+        $cert = Get-ChildItem Cert:\CurrentUser\My -CodeSigningCert | Where-Object Thumbprint -eq $CertificateThumbprint
+        if (-not $cert -or -not $cert.HasPrivateKey -or $cert.NotAfter -le (Get-Date)) {
+            throw "No usable code-signing certificate/private key in CurrentUser\My."
+        }
+        if ($cert.GetNameInfo([System.Security.Cryptography.X509Certificates.X509NameType]::SimpleName, $false) -ne $Publisher) {
+            throw "The signing certificate does not match Publisher."
+        }
+        if (-not $SignToolPath) {
+            $tool = Get-Command signtool.exe -ErrorAction SilentlyContinue
+            if ($tool) { $SignToolPath = $tool.Source }
+        }
+        if (-not $SignToolPath) { throw "Windows SDK signtool.exe is required for release." }
+        & $python scripts/check_native_release.py --root $DriverPackageDir
+        if ($LASTEXITCODE -ne 0) { throw "Signed driver package preflight failed." }
+        $env:GLIDELEAF_DRIVER_PACKAGES = $DriverPackageDir
+    } elseif ($DriverPackageDir) {
+        $env:GLIDELEAF_DRIVER_PACKAGES = (Resolve-Path -LiteralPath $DriverPackageDir).Path
+    } else {
+        Remove-Item Env:\GLIDELEAF_DRIVER_PACKAGES -ErrorAction SilentlyContinue
+    }
+    if (-not $SkipInstallDependencies) {
+        & $python -m pip install --disable-pip-version-check -r requirements-dev.txt pyinstaller
+        if ($LASTEXITCODE -ne 0) { throw "Build dependency installation failed." }
+    }
+    if ($FetchFirmware) {
+        New-Item -ItemType Directory -Force (Join-Path $repo 'firmware') | Out-Null
+        & (Join-Path $repo '.venv\Scripts\bumble-rtk-fw-download.exe') --output-dir (Join-Path $repo 'firmware')
+        if ($LASTEXITCODE -ne 0) { throw "Firmware download failed." }
+    }
+    & $python scripts/collect_licenses.py
+    if ($LASTEXITCODE -ne 0) { throw "License collection failed." }
+    & $python -m PyInstaller --noconfirm packaging/winuc.spec
+    if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed." }
+    $app = Join-Path $repo 'dist\Glideleaf\Glideleaf.exe'
+    if ($Release) {
+        & $SignToolPath sign /sha1 $CertificateThumbprint /fd SHA256 /tr $TimestampUrl /td SHA256 $app
+        if ($LASTEXITCODE -ne 0) { throw "Application/helper signing failed." }
+        & (Join-Path $PSScriptRoot 'verify_release.ps1') -AppPath $app -Publisher $Publisher -DriverPackageDir (Join-Path $repo 'dist\Glideleaf\_internal\driver-packages') -PythonPath $python
+    } else {
+        Write-Host 'DEVELOPMENT BUILD: unsigned app; native installation requires separately signed driver packages.'
+    }
+    Write-Host "Portable app: $app"
+} finally {
+    if ($null -eq $previousPackages) { Remove-Item Env:\GLIDELEAF_DRIVER_PACKAGES -ErrorAction SilentlyContinue }
+    else { $env:GLIDELEAF_DRIVER_PACKAGES = $previousPackages }
+    Pop-Location
 }
-
-Write-Host "[4/5] Running PyInstaller..." -ForegroundColor Cyan
-& $py -m PyInstaller --noconfirm --clean (Join-Path $PSScriptRoot "winuc.spec")
-if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed" }
-
-Write-Host "[5/5] Compiling the installer (Inno Setup)..." -ForegroundColor Cyan
-$iscc = Get-Command ISCC.exe -ErrorAction SilentlyContinue
-if (-not $iscc) {
-    $guess = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
-    if (Test-Path $guess) { $iscc = $guess } else { $iscc = $null }
-}
-if ($iscc) {
-    & $iscc (Join-Path $PSScriptRoot "winuc.iss")
-    if ($LASTEXITCODE -ne 0) { throw "Installer compilation failed" }
-    Write-Host "Installer written to dist\installer\" -ForegroundColor Green
-} else {
-    Write-Host "ISCC.exe (Inno Setup) not found. Portable build is in dist\Glideleaf\." -ForegroundColor Yellow
-    Write-Host "Install Inno Setup 6 to produce the .exe installer: https://jrsoftware.org/isdl.php" -ForegroundColor Yellow
-}
-

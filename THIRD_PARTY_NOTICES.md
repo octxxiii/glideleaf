@@ -33,14 +33,12 @@ Python과 Tcl/Tk 및 Pillow wheel 등에 포함된 네이티브 라이브러리 
 
 ## 선택 구성 요소
 
-- 공식 Zadig 2.9: Akeo Consulting 서명, GPL-3.0-or-later. 포함된 libwdi는
-  LGPL-3.0-or-later입니다. 앱에서 전환 확인 후 공식 릴리스를 다운로드하며,
-  해시·서명 검증 후 공식 창을 열어 사용자가 장치와 설치를 확인합니다.
-  실행 파일을 Git 소스나 기본 빌드에 직접 포함하지 않습니다.
-  GPL/LGPL 전문은 winuc/licenses 및 다운로드한 도구 옆에 보존합니다.
-  정확한 다운로드·대응 소스·해시는 docs/DRIVER_TOOL.md를 확인하세요.
-  이전 개발판의 미서명 커뮤니티 CLI 캐시는 GUI 설치 경로에서 사용하지 않습니다.
-  https://github.com/pbatard/libwdi/tree/v1.5.1
+- 자체 동글 설치: Windows 내장 WinUSB 및 시스템 설치 API를 사용합니다.
+  Zadig/libwdi/wdi-simple 실행 파일이나 라이브러리는 현재 앱에 포함하거나
+  다운로드하지 않습니다. 이전 개발판의 캐시도 사용하지 않습니다.
+  기존 winuc/licenses의 GPL/LGPL 전문은 이전 개발판 고지 이력을 위해 보존합니다.
+  자체 INF 소스는 프로젝트 MIT 코드이며 실제 배포 패키지는 Windows의
+  서명·신뢰 검증을 통과해야 합니다. docs/DRIVER_TOOL.md를 확인하세요.
 - Realtek 펌웨어: MIT 프로젝트 코드에 포함되지 않습니다. 실제 다운로드한 파일에
   적용되는 펌웨어 라이선스와 배포 조건을 확인하고 고지문을 함께 제공해야 합니다.
   https://gitlab.com/kernel-firmware/linux-firmware

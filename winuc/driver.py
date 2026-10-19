@@ -3,14 +3,10 @@
 WinUC drives the dongle in user space (via bumble/libusb), which requires the
 dongle to be bound to the WinUSB driver instead of the in-box Bluetooth stack.
 
-The GUI prepares the official signed Zadig installer and asks the user to
-confirm the device and installation there. A legacy explicit wdi-simple helper
-remains for callers supplying their own build; the GUI never uses it.
-Restoring the in-box driver is done with pnputil.
+The GUI uses the app's own elevated helper and signed, hardware-specific INF
+packages. The actual kernel driver is Microsoft's inbox WinUSB. No Zadig,
+community executable or runtime trust-certificate installation is used.
 
-All install/restore operations require Administrator. The GUI calls the
-`*_elevated` helpers, which re-launch this module's CLI verbs elevated (one UAC
-prompt) when the current process is not already elevated.
 """
 
 from __future__ import annotations
@@ -78,20 +74,6 @@ def is_admin() -> bool:
         return bool(ctypes.windll.shell32.IsUserAnAdmin())
     except OSError:
         return False
-
-
-def wdi_simple_path() -> Path | None:
-    """Locate the bundled wdi-simple.exe (dev tree or PyInstaller bundle)."""
-    candidates = [Path(__file__).resolve().parent.parent / "tools" / "wdi-simple.exe"]
-    meipass = getattr(sys, "_MEIPASS", None)
-    if meipass:  # PyInstaller bundle root (_internal in onedir)
-        candidates.insert(0, Path(meipass) / "tools" / "wdi-simple.exe")
-    if getattr(sys, "frozen", False):
-        candidates.insert(0, Path(sys.executable).resolve().parent / "tools" / "wdi-simple.exe")
-    for path in candidates:
-        if path.is_file():
-            return path
-    return None
 
 
 # --------------------------------------------------------------- detection
@@ -294,30 +276,46 @@ def _run(cmd: list[str], timeout: int = 180) -> subprocess.CompletedProcess:
                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
 
 
-def install_winusb(vid: int, pid: int, name: str = "Glideleaf Bluetooth") -> None:
-    """Force-bind the dongle to WinUSB using wdi-simple. Requires admin."""
-    exe = wdi_simple_path()
-    if exe is None:
-        raise FileNotFoundError(
-            "wdi-simple.exe not found. Run scripts/fetch_wdi.ps1 or build libwdi."
-        )
-    from .paths import data_dir
-    extraction = data_dir() / "drivers" / f"{vid:04x}-{pid:04x}"
-    extraction.mkdir(parents=True, exist_ok=True)
-    result = _run([
-        str(exe),
-        "--vid", f"0x{vid:04X}",
-        "--pid", f"0x{pid:04X}",
-        "--type", "0",  # 0 = WinUSB
-        "--name", name,
-        "--timeout", "120000",
-        "--dest", str(extraction),
-    ])
-    if result.returncode != 0:
-        raise RuntimeError(
-            f"wdi-simple failed (exit {result.returncode}): "
-            f"{result.stdout.strip()} {result.stderr.strip()}"
-        )
+def _selected_target(vid: int, pid: int, identity: str | None = None) -> Dongle:
+    from .i18n import t
+    if identity:
+        selected = resolve_selected_adapter(identity)
+    else:
+        candidates = [d for d in list_dongles() if d.vidpid == (vid, pid)]
+        if not candidates:
+            raise RuntimeError(t("적용한 동글을 찾지 못했습니다. 다시 연결하거나 목록에서 다른 동글을 적용해 주세요."))
+        if len(candidates) != 1:
+            raise RuntimeError(t("같은 USB ID의 동글이 여러 개입니다. 사용할 동글 하나만 연결한 뒤 다시 검색해 주세요."))
+        selected = candidates[0]
+    if selected.vidpid != (vid, pid):
+        raise RuntimeError(t("동글 선택과 연결 설정이 일치하지 않습니다. 동글을 다시 적용해 주세요."))
+    return selected
+
+
+def _check_native_target(selected: Dongle) -> None:
+    from .i18n import t
+    hardware = selected.instance_id.split("\\", 2)
+    expected = f"VID_{selected.vid:04X}&PID_{selected.pid:04X}"
+    if len(hardware) != 3 or hardware[1].upper() != expected:
+        # Our INF matches the whole VID/PID, not an MI_XX interface. Never
+        # replace a composite parent (and its Wi-Fi/HID siblings) by mistake.
+        raise RuntimeError(t("복합 USB 장치의 자체 드라이버 전환은 아직 지원하지 않습니다. 장치를 변경하지 않습니다."))
+
+
+def install_winusb(vid: int, pid: int, name: str = "Glideleaf Bluetooth", *, adapter_id: str | None = None) -> None:
+    """Own elevated helper: Windows APIs, a signed package, and a unique target."""
+    from . import native_driver
+    if not is_admin():
+        raise PermissionError("Administrator approval is required for driver setup")
+    package = native_driver.prepare_package(vid, pid)
+    selected = _selected_target(vid, pid, adapter_id)
+    if selected.is_winusb:
+        return
+    _check_native_target(selected)
+    logger.info("Native driver install: USB %04X:%04X, signer=%s", vid, pid, package.signer)
+    if native_driver.update_driver(vid, pid, package):
+        raise native_driver.RebootRequired()
+    require_selected_adapter(selected.identity, selected.transport)
 
 
 def _enum_winusb_oem_infs(vid: int, pid: int) -> list[str]:
@@ -404,43 +402,94 @@ def _relaunch_elevated(args: list[str], wait: bool = True, *, executable: Path |
     info.lpDirectory = str(directory or (Path(sys.executable).resolve().parent if getattr(sys, "frozen", False)
                            else Path(__file__).resolve().parent.parent))
     info.nShow = 1 if visible else 0
-    if not ctypes.windll.shell32.ShellExecuteExW(ctypes.byref(info)):
-        raise OSError("elevation was cancelled or failed")
+    shell = ctypes.WinDLL("shell32.dll", use_last_error=True)
+    shell.ShellExecuteExW.argtypes = [ctypes.POINTER(SHELLEXECUTEINFO)]
+    shell.ShellExecuteExW.restype = wt.BOOL
+    if not shell.ShellExecuteExW(ctypes.byref(info)):
+        raise ctypes.WinError(ctypes.get_last_error())
     if not wait or not info.hProcess:
         return 0
-    ctypes.windll.kernel32.WaitForSingleObject(info.hProcess, 0xFFFFFFFF)
-    code = wt.DWORD()
-    ctypes.windll.kernel32.GetExitCodeProcess(info.hProcess, ctypes.byref(code))
-    ctypes.windll.kernel32.CloseHandle(info.hProcess)
-    return code.value
+    kernel = ctypes.WinDLL("kernel32.dll", use_last_error=True)
+    kernel.WaitForSingleObject.argtypes = [wt.HANDLE, wt.DWORD]
+    kernel.WaitForSingleObject.restype = wt.DWORD
+    kernel.GetExitCodeProcess.argtypes = [wt.HANDLE, ctypes.POINTER(wt.DWORD)]
+    kernel.GetExitCodeProcess.restype = wt.BOOL
+    kernel.CloseHandle.argtypes = [wt.HANDLE]
+    kernel.CloseHandle.restype = wt.BOOL
+    try:
+        if kernel.WaitForSingleObject(info.hProcess, 0xFFFFFFFF) == 0xFFFFFFFF:
+            raise ctypes.WinError(ctypes.get_last_error())
+        code = wt.DWORD()
+        if not kernel.GetExitCodeProcess(info.hProcess, ctypes.byref(code)):
+            raise ctypes.WinError(ctypes.get_last_error())
+        return code.value
+    finally:
+        kernel.CloseHandle(info.hProcess)
 
 
-def install_winusb_elevated(vid: int, pid: int, name: str = "Glideleaf Bluetooth") -> None:
-    # Never use the unsigned community CLI, even if it remains cached/bundled.
-    # The official signed GUI requires the user to confirm the actual target.
-    from .driver_tool import ensure_tool
+def _elevated_operation(operation: str, vid: int, pid: int, selected: Dongle) -> None:
+    import json
+    import tempfile
+    from .native_driver import REBOOT_EXIT_CODE, RebootRequired
+    from .i18n import get_language
+    with tempfile.TemporaryDirectory(prefix="glideleaf-driver-") as directory:
+        result_file = Path(directory) / "result.json"
+        code = _relaunch_elevated([
+            f"--driver-{operation}", "--vid", f"0x{vid:04X}", "--pid", f"0x{pid:04X}",
+            "--adapter-id", selected.identity, "--driver-result", str(result_file),
+            "--driver-language", get_language(),
+        ])
+        if code == REBOOT_EXIT_CODE:
+            raise RebootRequired()
+        if code:
+            try:
+                result = json.loads(result_file.read_text(encoding="utf-8"))
+                if result.get("operation") == operation and result.get("adapter_id") == selected.identity:
+                    detail = result.get("error")
+                    if isinstance(detail, str) and detail:
+                        raise RuntimeError(detail[:4000])
+            except (OSError, ValueError):
+                pass
+            from .paths import log_path
+            raise RuntimeError(f"Driver {operation} failed (exit {code}). Details: {log_path()}")
+
+
+def driver_result_path(value: str) -> Path:
+    """The privileged helper may only create a new result in our temp request."""
+    import tempfile
+    path = Path(value).resolve()
+    temp = Path(tempfile.gettempdir()).resolve()
+    if (path.name != "result.json" or path.parent.parent != temp
+            or not path.parent.name.startswith("glideleaf-driver-") or not path.parent.is_dir()
+            or path.exists()):
+        raise ValueError("Invalid native driver result destination")
+    return path
+
+
+def install_winusb_elevated(vid: int, pid: int, name: str = "Glideleaf Bluetooth", *, adapter_id: str | None = None) -> None:
+    from .native_driver import prepare_package
+    selected = _selected_target(vid, pid, adapter_id)
+    if selected.is_winusb:
+        return
+    _check_native_target(selected)
+    prepare_package(vid, pid)  # Stop before UAC if the release package is absent/untrusted.
+    if is_admin():
+        install_winusb(vid, pid, name, adapter_id=selected.identity)
+    else:
+        _elevated_operation("install", vid, pid, selected)
+    require_selected_adapter(selected.identity, selected.transport)
+
+
+def restore_inbox_elevated(vid: int, pid: int, *, adapter_id: str | None = None) -> None:
     from .i18n import t
-    tool = ensure_tool()
-    (tool.parent / "zadig.ini").write_text(
-        "[device]\nlist_all = true\ninclude_hubs = false\n"
-        "[driver]\ndefault_driver = 0\n[general]\nexit_on_success = true\n",
-        encoding="utf-8")
-    code = _relaunch_elevated([], executable=tool, directory=tool.parent, visible=True)
-    if code != 0:
-        raise RuntimeError(f"Official Zadig exited with error {code}. Driver installation was not confirmed.")
-    # Closing the official window is not proof that a driver was installed.
-    matches = [d for d in list_dongles() if d.vidpid == (vid, pid)]
-    if len(matches) != 1 or not matches[0].is_winusb:
-        raise RuntimeError(t("선택한 동글을 WinUSB로 전환한 뒤 연결을 시작해 주세요."))
-
-
-def restore_inbox_elevated(vid: int, pid: int) -> None:
+    selected = _selected_target(vid, pid, adapter_id)
+    if selected.driver == "inbox":
+        return
+    _check_native_target(selected)
     if is_admin():
         restore_inbox(vid, pid)
-        return
-    code = _relaunch_elevated(
-        ["--driver-restore", "--vid", f"0x{vid:04X}", "--pid", f"0x{pid:04X}"]
-    )
-    if code != 0:
-        from .paths import log_path
-        raise RuntimeError(f"elevated driver restore failed (exit {code}). Details: {log_path()}")
+    else:
+        _elevated_operation("restore", vid, pid, selected)
+    current = _selected_target(vid, pid, selected.identity)
+    if current.driver != "inbox":
+        raise RuntimeError(t("일반 Bluetooth 드라이버 복원을 확인하지 못했습니다. 동글을 다시 연결하고 다시 검색해 주세요."))

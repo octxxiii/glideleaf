@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from .i18n import t
+
 import asyncio
 import logging
+import threading
 from typing import Any, Callable
 
 from bumble.device import Device
@@ -55,6 +58,7 @@ class UniversalControlApp:
         self._drag_buttons: set[int] = set()  # held drag_scroll buttons
         self._wheel_repeat_task: asyncio.Task | None = None
         self._stop_event: asyncio.Event | None = None
+        self._stop_requested = threading.Event()
         # Optional status callback: called (thread-safely) on connection changes
         # with one of "advertising" | "connected" | "ready".
         self.on_status: Callable[[str], None] | None = None
@@ -100,6 +104,8 @@ class UniversalControlApp:
     async def run(self, enable_capture: bool = True) -> None:
         self.loop = asyncio.get_running_loop()
         self._stop_event = asyncio.Event()
+        if self._stop_requested.is_set():
+            return
         enable_dpi_awareness()
 
         async with await open_transport(self.config.transport) as hci_transport:
@@ -114,26 +120,32 @@ class UniversalControlApp:
             if self.on_status is not None:
                 self.on_status("advertising")
 
-            if enable_capture:
-                self.capture = InputCapture(
-                    self.machine,
-                    self._emit_from_hook_thread,
-                    release_hotkey=self.config.release_hotkey,
-                    forward_injected=self.config.forward_injected,
-                    passthrough_buttons=tuple(self.config.passthrough_buttons),
-                )
-                self.capture.start()
-                self.capture.wait_started()
-
-            pump = asyncio.create_task(self._pump_events())
+            pump = None
+            stopping = None
             try:
-                await self._stop_event.wait()
-            finally:
-                pump.cancel()
-                try:
+                if enable_capture:
+                    self.capture = InputCapture(
+                        self.machine,
+                        self._emit_from_hook_thread,
+                        release_hotkey=self.config.release_hotkey,
+                        forward_injected=self.config.forward_injected,
+                        passthrough_buttons=tuple(self.config.passthrough_buttons),
+                    )
+                    self.capture.start()
+                    if not await asyncio.to_thread(self.capture.wait_started):
+                        raise RuntimeError(t("입력 캡처를 시작하지 못했습니다."))
+                    self.capture.armed = self.peripheral.ready
+                pump = asyncio.create_task(self._pump_events())
+                stopping = asyncio.create_task(self._stop_event.wait())
+                done, _ = await asyncio.wait((pump, stopping), return_when=asyncio.FIRST_COMPLETED)
+                if pump in done:
                     await pump
-                except asyncio.CancelledError:
-                    pass
+                    raise RuntimeError(t("입력 전송이 중단되었습니다."))
+            finally:
+                tasks = [task for task in (pump, stopping) if task is not None]
+                for task in tasks:
+                    task.cancel()
+                await asyncio.gather(*tasks, return_exceptions=True)
                 if self._wheel_repeat_task is not None:
                     self._wheel_repeat_task.cancel()
                     self._wheel_repeat_task = None
@@ -144,8 +156,9 @@ class UniversalControlApp:
 
     def request_stop(self) -> None:
         """Ask the run() loop to shut down cleanly (callable from any thread)."""
+        self._stop_requested.set()
         loop, event = self.loop, self._stop_event
-        if loop is not None and event is not None:
+        if loop is not None and event is not None and not loop.is_closed():
             loop.call_soon_threadsafe(event.set)
 
     # --------------------------------------------------------- event pump
@@ -278,6 +291,8 @@ class UniversalControlApp:
         self.keyboard_state.clear()
         self._buttons = 0
         self._drag_buttons.clear()
+        self._wheel_acc = self._hwheel_acc = 0.0
+        self._consumer_down = None
         if self._wheel_repeat_task is not None:
             self._wheel_repeat_task.cancel()
             self._wheel_repeat_task = None

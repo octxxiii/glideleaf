@@ -15,9 +15,16 @@ tools/
 # Build artifacts
 build/
 dist/
+artifacts/
+.env
+.env.*
+!.env.example
 *.spec.bak
 
 # Misc
 selftest_keys.json
+pairing_keys.json
+*.log
+*.log.*
 scripts/zadig.exe
 .ref_*.py

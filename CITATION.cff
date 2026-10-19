@@ -1,0 +1,27 @@
+cff-version: 1.2.0
+message: "If you reference Glideleaf, cite this repository and acknowledge fuba/winuc."
+title: "Glideleaf: Windows-to-iPad mouse and keyboard sharing over Bluetooth LE"
+type: software
+version: 0.1.0
+license: MIT
+repository-code: "https://github.com/octxxiii/glideleaf"
+url: "https://github.com/octxxiii/glideleaf"
+authors:
+  - name: "Glideleaf contributors"
+abstract: >-
+  An independent derivative of fuba/winuc with a multilingual Windows UI,
+  forwarding mouse and keyboard input to iPad through a dedicated USB
+  Bluetooth adapter using BLE HID over GATT. Alpha source preview;
+  physical-device qualification remains pending.
+keywords:
+  - Windows
+  - iPad
+  - Bluetooth LE
+  - HID over GATT
+  - mouse and keyboard sharing
+references:
+  - type: software
+    title: "WinUC"
+    authors:
+      - name: "fuba"
+    repository-code: "https://github.com/fuba/winuc"

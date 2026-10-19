@@ -1,0 +1,29 @@
+name: Bug report
+description: Report a reproducible Glideleaf problem.
+body:
+  - type: markdown
+    attributes:
+      value: "Do not attach pairing keys, config secrets, or unredacted personal logs."
+  - type: input
+    id: version
+    attributes:
+      label: Glideleaf commit or version
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Windows version, Python version, iPad model/iPadOS, UI language, adapter chipset and USB VID/PID.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps, expected result, actual result
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Redacted logs or screenshots

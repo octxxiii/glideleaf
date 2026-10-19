@@ -3,8 +3,8 @@
 #   packaging\build.ps1
 #
 # Steps: ensure venv deps + PyInstaller, fetch firmware + wdi-simple, run
-# PyInstaller (dist\WinUC), then compile the Inno Setup installer if ISCC is
-# available (dist\installer\WinUC-Setup-*.exe).
+# PyInstaller (dist\Glideleaf), then compile the Inno Setup installer if ISCC is
+# available (dist\installer\Glideleaf-Setup-*.exe).
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path $PSScriptRoot -Parent
@@ -15,10 +15,14 @@ if (-not (Test-Path $py)) { throw "venv not found; run: python -m venv .venv; .v
 
 Write-Host "[1/5] Installing build dependencies..." -ForegroundColor Cyan
 & $py -m pip install --quiet --disable-pip-version-check -r requirements.txt pyinstaller
+if ($LASTEXITCODE -ne 0) { throw "Build dependencies failed" }
+& $py (Join-Path $root "scripts\collect_licenses.py")
+if ($LASTEXITCODE -ne 0) { throw "License collection failed" }
 
 Write-Host "[2/5] Fetching Realtek firmware..." -ForegroundColor Cyan
 New-Item -ItemType Directory -Force (Join-Path $root "firmware") | Out-Null
 & (Join-Path $root ".venv\Scripts\bumble-rtk-fw-download.exe") --output-dir (Join-Path $root "firmware")
+if ($LASTEXITCODE -ne 0) { throw "Firmware download failed" }
 
 Write-Host "[3/5] Checking for wdi-simple.exe (WinUSB installer)..." -ForegroundColor Cyan
 # Not auto-downloaded: bundling wdi-simple.exe (libwdi, LGPL-3.0) in a
@@ -34,6 +38,7 @@ if (Test-Path (Join-Path $root "tools\wdi-simple.exe")) {
 
 Write-Host "[4/5] Running PyInstaller..." -ForegroundColor Cyan
 & $py -m PyInstaller --noconfirm --clean (Join-Path $PSScriptRoot "winuc.spec")
+if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed" }
 
 Write-Host "[5/5] Compiling the installer (Inno Setup)..." -ForegroundColor Cyan
 $iscc = Get-Command ISCC.exe -ErrorAction SilentlyContinue
@@ -43,9 +48,10 @@ if (-not $iscc) {
 }
 if ($iscc) {
     & $iscc (Join-Path $PSScriptRoot "winuc.iss")
+    if ($LASTEXITCODE -ne 0) { throw "Installer compilation failed" }
     Write-Host "Installer written to dist\installer\" -ForegroundColor Green
 } else {
-    Write-Host "ISCC.exe (Inno Setup) not found. Portable build is in dist\WinUC\." -ForegroundColor Yellow
+    Write-Host "ISCC.exe (Inno Setup) not found. Portable build is in dist\Glideleaf\." -ForegroundColor Yellow
     Write-Host "Install Inno Setup 6 to produce the .exe installer: https://jrsoftware.org/isdl.php" -ForegroundColor Yellow
 }
 

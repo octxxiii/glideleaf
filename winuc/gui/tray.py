@@ -7,6 +7,10 @@ thread. We keep a hidden Tk root on the main thread and marshal all UI work
 
 from __future__ import annotations
 
+from ..i18n import t
+from ..i18n import set_language
+from dataclasses import replace
+
 import logging
 import queue
 import tkinter as tk
@@ -30,16 +34,17 @@ from ..service import (
 from .icons import make_icon
 from .settings import SettingsWindow
 from .setup_wizard import SetupWizard
+from .dashboard import Dashboard
 
 logger = logging.getLogger(__name__)
 
 _STATUS_TEXT = {
-    STATUS_STOPPED: "Stopped",
-    STATUS_STARTING: "Starting …",
-    STATUS_ADVERTISING: "Waiting for iPad …",
-    STATUS_CONNECTED: "iPad connected",
-    STATUS_READY: "Active — controlling iPad",
-    STATUS_ERROR: "Error",
+    STATUS_STOPPED: "연결 꺼짐",
+    STATUS_STARTING: "연결 준비 중",
+    STATUS_ADVERTISING: "iPad 연결 대기",
+    STATUS_CONNECTED: "iPad 연결됨",
+    STATUS_READY: "입력 공유 준비 완료",
+    STATUS_ERROR: "연결 오류",
 }
 
 
@@ -47,10 +52,14 @@ class TrayApp:
     def __init__(self) -> None:
         self.config_file = config_path()
         self.config = Config.load(self.config_file)
+        set_language(self.config.language)
         if not self.config_file.exists():
             self.config.save(self.config_file)
         self.service = Service()
         self.service.on_status_change = self._on_status_change
+
+        from ..capture import enable_dpi_awareness
+        enable_dpi_awareness()
 
         # Hidden Tk root on the main thread. All UI runs here.
         self.root = tk.Tk()
@@ -58,11 +67,13 @@ class TrayApp:
         # Marshalling queue: tray-thread callbacks -> main-thread execution.
         self._ui_queue: queue.SimpleQueue[Callable[[], None]] = queue.SimpleQueue()
         self._settings_win: SettingsWindow | None = None
+        self._dashboard = None
+        self._wizard = None
 
         self.icon = pystray.Icon(
-            "winuc",
+            "glideleaf",
             icon=make_icon(STATUS_STOPPED),
-            title="WinUC — Stopped",
+            title="Glideleaf",
             menu=self._build_menu(),
         )
         self._pump_ui_queue()
@@ -74,25 +85,26 @@ class TrayApp:
             return self.service.running
 
         def status_label(_item):
-            return _STATUS_TEXT.get(self.service.status, self.service.status)
+            return t(_STATUS_TEXT.get(self.service.status, self.service.status))
 
         return pystray.Menu(
+            pystray.MenuItem(t("Glideleaf 연결 패널"), self._open_dashboard, default=True),
             pystray.MenuItem(status_label, None, enabled=False),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem(
-                "Enabled",
+                t("입력 공유 사용"),
                 self._toggle_running,
                 checked=lambda _i: self.service.running,
             ),
-            pystray.MenuItem("Settings…", self._open_settings),
-            pystray.MenuItem("Setup / Dongle…", self._open_wizard),
+            pystray.MenuItem(t("설정…"), self._open_settings),
+            pystray.MenuItem(t("동글 설정 / 복원…"), self._open_wizard),
             pystray.MenuItem(
-                "Start at sign-in",
+                t("로그인 시 자동 실행"),
                 self._toggle_autostart,
                 checked=lambda _i: autostart.is_enabled(),
             ),
             pystray.Menu.SEPARATOR,
-            pystray.MenuItem("Quit", self._quit),
+            pystray.MenuItem(t("종료"), self._quit),
         )
 
     # ------------------------------------------------- main-thread marshal
@@ -119,7 +131,16 @@ class TrayApp:
             self.service.stop()
         else:
             self.service.start(self.config)
-        self._refresh_icon()
+        self._on_main(self._refresh_icon)
+
+    def _open_dashboard(self, _icon=None, _item=None) -> None:
+        def show():
+            if self._dashboard is not None and self._dashboard.win.winfo_exists():
+                self._dashboard.win.deiconify()
+                self._dashboard.win.lift()
+            else:
+                self._dashboard = Dashboard(self)
+        self._on_main(show)
 
     def _open_settings(self, _icon=None, _item=None) -> None:
         def show():
@@ -130,15 +151,43 @@ class TrayApp:
         self._on_main(show)
 
     def _open_wizard(self, _icon=None, _item=None) -> None:
-        self._on_main(lambda: SetupWizard(self.root))
+        def show():
+            if self._wizard is not None and self._wizard.win.winfo_exists():
+                self._wizard.win.lift()
+            else:
+                self._wizard = SetupWizard(self.root)
+        self._on_main(show)
 
     def _apply_config(self, config: Config) -> None:
-        self.config = config
         config.save(self.config_file)
-        if self.service.running:
+        previous = self.config
+        self.config = config
+        language_changed = previous.language != config.language
+        set_language(config.language)
+        if self.service.running and replace(previous, language=config.language) != config:
             # Restart the link so new settings take effect immediately.
             self.service.restart(config)
+        if language_changed:
+            self.root.after_idle(self._refresh_language)
         self._refresh_icon()
+
+    def _refresh_language(self) -> None:
+        self.icon.menu = self._build_menu()
+        self.icon.update_menu()
+        if self._dashboard is not None and self._dashboard.win.winfo_exists():
+            self._dashboard.close()
+            self._dashboard = Dashboard(self)
+        self._refresh_wizard_language()
+
+    def _refresh_wizard_language(self) -> None:
+        wizard = self._wizard
+        if wizard is None or not wizard.win.winfo_exists():
+            return
+        if wizard._busy:
+            self.root.after(100, self._refresh_wizard_language)
+            return
+        wizard._close()
+        self._wizard = SetupWizard(self.root)
 
     def _toggle_autostart(self, _icon=None, _item=None) -> None:
         autostart.set_enabled(not autostart.is_enabled())
@@ -154,14 +203,14 @@ class TrayApp:
         # Called from the service thread; marshal icon update safely.
         self._on_main(self._refresh_icon)
         if status == STATUS_ERROR:
-            err = self.service.last_error or "Unknown error"
+            err = self.service.last_error or t("알 수 없는 오류")
             self._on_main(lambda: messagebox.showerror(
-                "WinUC", f"The BLE service stopped:\n\n{err}", parent=self.root))
+                "Glideleaf", t("BLE 서비스가 중단되었습니다:\n\n{error}", error=err), parent=self.root))
 
     def _refresh_icon(self) -> None:
         status = self.service.status
         self.icon.icon = make_icon(status)
-        self.icon.title = f"WinUC — {_STATUS_TEXT.get(status, status)}"
+        self.icon.title = f"Glideleaf — {t(_STATUS_TEXT.get(status, status))}"
         self.icon.update_menu()
 
     # --------------------------------------------------------------- loop
@@ -169,8 +218,9 @@ class TrayApp:
     def run(self, autostart_service: bool = True, first_run: bool = False) -> None:
         # pystray runs its own thread; Tk mainloop stays on the main thread.
         self.icon.run_detached()
+        self._open_dashboard()
         if first_run:
-            self._on_main(lambda: SetupWizard(self.root))
+            self._open_wizard()
         elif autostart_service:
             self.service.start(self.config)
             self._refresh_icon()

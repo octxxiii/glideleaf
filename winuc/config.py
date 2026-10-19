@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
+from .i18n import t
+
 import json
+import math
+import os
+import re
+import tempfile
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 
@@ -17,9 +23,10 @@ class PnpId:
 
 @dataclass
 class Config:
+    language: str = "auto"  # UI preference; independent of keyboard layout.
     # BLE
     device_name: str = "Windows Pointer & Keyboard"
-    manufacturer_name: str = "WinUC"
+    manufacturer_name: str = "Glideleaf"
     # bumble transport specifier. [driver=rtk] forces the Realtek FW loader.
     transport: str = "usb:[driver=rtk]0"
     # Static random address (top 2 bits must be 11)
@@ -50,6 +57,32 @@ class Config:
     drag_scroll_px: int = 30         # How many pixels of movement per scroll notch
     drag_scroll_invert: bool = False # Invert drag-scroll direction
 
+    def validate(self) -> None:
+        """Reject settings that can break motion or the emergency return key."""
+        from .i18n import LANGUAGES
+        if self.language not in LANGUAGES:
+            raise ValueError(t("지원하지 않는 언어입니다."))
+        if self.edge not in ("right", "left", "top", "bottom"):
+            raise ValueError(t("iPad 방향을 선택해 주세요."))
+        if not isinstance(self.speed, (int, float)) or not math.isfinite(self.speed) or not 0.2 <= self.speed <= 5:
+            raise ValueError(t("포인터 속도는 0.2~5 사이여야 합니다."))
+        for name in ("push_threshold_px", "return_threshold_px", "drag_scroll_px"):
+            value = getattr(self, name)
+            if type(value) is not int or not 1 <= value <= 1000:
+                raise ValueError(t("{name}: 1~1000 사이의 정수를 입력해 주세요.", name=name))
+        if len(self.ipad_screen) != 2 or any(type(v) is not int or not 1 <= v <= 10000 for v in self.ipad_screen):
+            raise ValueError(t("iPad 화면 크기는 1~10000 사이의 정수여야 합니다."))
+        if not isinstance(self.device_name, str) or not self.device_name.strip():
+            raise ValueError(t("블루투스 이름을 입력해 주세요."))
+        if not isinstance(self.transport, str) or not self.transport.strip():
+            raise ValueError(t("동글 연결 경로를 입력해 주세요."))
+        if not re.fullmatch(r"(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}", self.address) or int(self.address[:2], 16) & 0xC0 != 0xC0:
+            raise ValueError(t("유효한 Static Random BLE 주소를 입력해 주세요."))
+        if not re.fullmatch(r"(?i)(?:(?:ctrl|alt|shift|win)\+)+[a-z0-9]", self.release_hotkey):
+            raise ValueError(t("복귀 단축키는 ctrl+alt+q처럼 보조키와 영문 또는 숫자를 사용해 주세요."))
+        if any(k not in ("x1", "x2", "middle") or v not in ("drag_scroll", "wheel_up", "wheel_down") for k, v in self.button_actions.items()):
+            raise ValueError(t("마우스 버튼 동작이 올바르지 않습니다."))
+
     @classmethod
     def load(cls, path: str | Path) -> "Config":
         path = Path(path)
@@ -61,10 +94,24 @@ class Config:
         if "passthrough_buttons" in data:
             data["passthrough_buttons"] = tuple(data["passthrough_buttons"])
         known = {k: v for k, v in data.items() if k in cls.__dataclass_fields__}
-        return cls(pnp=pnp, ipad_screen=ipad_screen, **known)
+        config = cls(pnp=pnp, ipad_screen=ipad_screen, **known)
+        config.validate()
+        return config
 
     def save(self, path: str | Path) -> None:
+        self.validate()
         data = asdict(self)
-        Path(path).write_text(
-            json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
-        )
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        # Replace only after the complete file has reached disk.
+        temporary = None
+        try:
+            with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=path.parent, delete=False) as stream:
+                temporary = Path(stream.name)
+                stream.write(json.dumps(data, indent=2, ensure_ascii=False))
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temporary, path)
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)

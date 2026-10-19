@@ -329,36 +329,43 @@ class InputCapture(threading.Thread):
     # ----------------------------------------------------------- lifecycle
 
     def run(self) -> None:
-        self._thread_id = kernel32.GetCurrentThreadId()
-        self._create_raw_input_window()
-        self._mouse_hook = user32.SetWindowsHookExW(WH_MOUSE_LL, self._mouse_proc, None, 0)
-        self._keyboard_hook = user32.SetWindowsHookExW(
-            WH_KEYBOARD_LL, self._keyboard_proc, None, 0
-        )
-        if not self._mouse_hook or not self._keyboard_hook:
-            logger.error("Failed to install hooks (error %d)", kernel32.GetLastError())
-        self._update_edge_geometry()
-        self._started_event.set()
-        logger.info("Input capture started (edge=%s)", self.machine.edge)
-
-        msg = wt.MSG()
-        while user32.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
-            user32.TranslateMessage(ctypes.byref(msg))
-            user32.DispatchMessageW(ctypes.byref(msg))
-
-        if self._mouse_hook:
-            user32.UnhookWindowsHookEx(self._mouse_hook)
-        if self._keyboard_hook:
-            user32.UnhookWindowsHookEx(self._keyboard_hook)
-        user32.ClipCursor(None)
+        try:
+            self._thread_id = kernel32.GetCurrentThreadId()
+            self._create_raw_input_window()
+            self._mouse_hook = user32.SetWindowsHookExW(WH_MOUSE_LL, self._mouse_proc, None, 0)
+            self._keyboard_hook = user32.SetWindowsHookExW(
+                WH_KEYBOARD_LL, self._keyboard_proc, None, 0
+            )
+            if not self._mouse_hook or not self._keyboard_hook:
+                raise RuntimeError(f"Failed to install input hooks: {kernel32.GetLastError()}")
+            self._update_edge_geometry()
+            self._started_event.set()
+            logger.info("Input capture started (edge=%s)", self.machine.edge)
+            msg = wt.MSG()
+            while user32.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
+                user32.TranslateMessage(ctypes.byref(msg))
+                user32.DispatchMessageW(ctypes.byref(msg))
+        except Exception:
+            logger.exception("Input capture failed")
+        finally:
+            self.force_release()
+            if self._mouse_hook:
+                user32.UnhookWindowsHookEx(self._mouse_hook)
+            if self._keyboard_hook:
+                user32.UnhookWindowsHookEx(self._keyboard_hook)
+            if self._hwnd:
+                user32.DestroyWindow(self._hwnd)
+            user32.ClipCursor(None)
 
     def wait_started(self, timeout: float = 5.0) -> bool:
-        return self._started_event.wait(timeout)
+        return self._started_event.wait(timeout) and self.is_alive()
 
     def stop(self) -> None:
         self.force_release()
         if self._thread_id:
             user32.PostThreadMessageW(self._thread_id, WM_QUIT, 0, 0)
+        if self.is_alive() and threading.current_thread() is not self:
+            self.join(timeout=3)
 
     def force_release(self) -> None:
         """Safe to call from any thread: immediately return control to Windows."""

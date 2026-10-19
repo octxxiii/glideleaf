@@ -1,0 +1,28 @@
+# Glideleaf
+
+> Open-source Windows-to-iPad mouse and keyboard sharing over Bluetooth LE HID.
+
+Glideleaf forwards input through a dedicated USB Bluetooth adapter bound to
+WinUSB. An iPad-side app and a cloud relay are not required. It does not provide
+shared clipboard, file drag-and-drop, screen mirroring or no-dongle operation.
+
+Status: alpha source preview. Automated virtual BLE and Windows UI checks are
+separate from physical-device qualification, which remains pending in this fork.
+Nine GUI languages are implemented. CLI and installer translation are not claimed.
+
+Glideleaf is an independent derivative of fuba/winuc. Original MIT copyright and
+Git history are preserved. It is not an official Apple or fuba product.
+
+## Documentation
+
+- [Overview and setup](https://github.com/octxxiii/glideleaf#readme)
+- [Japanese guide](https://github.com/octxxiii/glideleaf/blob/main/docs/README.ja.md)
+- [Simplified Chinese guide](https://github.com/octxxiii/glideleaf/blob/main/docs/README.zh-Hans.md)
+- [Traditional Chinese guide](https://github.com/octxxiii/glideleaf/blob/main/docs/README.zh-Hant.md)
+- [Korean guide](https://github.com/octxxiii/glideleaf/blob/main/docs/README.ko.md)
+- [Hardware qualification](https://github.com/octxxiii/glideleaf/blob/main/docs/HARDWARE_VALIDATION.md)
+- [Licensing](https://github.com/octxxiii/glideleaf/blob/main/THIRD_PARTY_NOTICES.md)
+- [Upstream](https://github.com/fuba/winuc)
+
+This is an optional documentation index, not a crawler directive or a claim
+that search engines or AI assistants support or will use this convention.

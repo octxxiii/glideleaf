@@ -14,7 +14,11 @@ hiddenimports = (
     + ["libusb_package", "usb1"]
 )
 
-datas = []
+datas = [(str(ROOT / "LICENSE"), "."), (str(ROOT / "THIRD_PARTY_NOTICES.md"), ".")]
+notices = ROOT / "build" / "licenses"
+if not (notices / "dependencies.json").is_file():
+    raise RuntimeError("Run python scripts/collect_licenses.py before packaging")
+datas += [(str(notices), "licenses")]
 # Bundle Realtek firmware and the wdi-simple tool if present.
 fw = ROOT / "firmware"
 if fw.is_dir():
@@ -28,7 +32,7 @@ datas += collect_data_files("libusb_package")
 block_cipher = None
 
 a = Analysis(
-    ["../winuc/__main__.py"],
+    [str(ROOT / "packaging" / "launcher.py")],
     pathex=[str(ROOT)],
     binaries=[],
     datas=datas,
@@ -46,7 +50,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="WinUC",
+    name="Glideleaf",
     debug=False,
     strip=False,
     upx=False,
@@ -60,5 +64,5 @@ coll = COLLECT(
     a.datas,
     strip=False,
     upx=False,
-    name="WinUC",
+    name="Glideleaf",
 )

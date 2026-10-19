@@ -97,14 +97,18 @@ def test_driver_dongle_label():
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="autostart is Windows-only")
-def test_autostart_roundtrip():
+def test_autostart_roundtrip(monkeypatch):
     from winuc import autostart
+    import uuid
+    import winreg
 
-    was = autostart.is_enabled()
+    test_key = rf"Software\Glideleaf\Tests\{uuid.uuid4()}"
+    monkeypatch.setattr(autostart, "_RUN_KEY", test_key)
     try:
         autostart.enable()
         assert autostart.is_enabled()
         autostart.disable()
         assert not autostart.is_enabled()
     finally:
-        autostart.set_enabled(was)
+        autostart.disable()
+        winreg.DeleteKey(winreg.HKEY_CURRENT_USER, test_key)

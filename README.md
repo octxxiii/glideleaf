@@ -1,167 +1,156 @@
-# WinUC — Universal Control for Windows
+# Glideleaf — share a Windows mouse and keyboard with iPad
 
-Control your **iPad with the mouse and keyboard of your Windows PC**, the way
-macOS Universal Control lets a Mac drive an iPad. Push the pointer past a screen
-edge and it crosses onto the iPad; the keyboard follows. Push back through the
-shared edge to return. **Nothing is installed on the iPad** — to iPadOS this is
-just an ordinary Bluetooth mouse and keyboard.
+[![Windows tests](https://github.com/octxxiii/glideleaf/actions/workflows/test.yml/badge.svg)](https://github.com/octxxiii/glideleaf/actions/workflows/test.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-> **v2** adds a system-tray app with a GUI: setup wizard, one-click WinUSB
-> driver switching, settings, autostart, and an installer. The original
-> command-line mode still works (`python -m winuc`).
+**Glideleaf is an open-source Windows app that forwards your PC mouse and keyboard to an iPad over Bluetooth Low Energy.** Push the pointer past a configured screen edge to move control to the iPad; push back or use the emergency shortcut to return to Windows. The iPad sees a Bluetooth mouse and keyboard, so no iPad app is required.
 
-## How it works
+**A dedicated compatible USB Bluetooth adapter is required.** Glideleaf takes over that adapter with WinUSB. It is not a Wi-Fi remote desktop, a screen-mirroring app, or a replacement for every macOS Universal Control feature.
 
-iPadOS does not allow injecting input over the network, so the only practical
-path is to make **Windows itself act as a Bluetooth LE mouse + keyboard**
-(HID over GATT, "HOGP"). Since iPadOS 13.4 a BLE mouse is a first-class pointer,
-so the iPad sees a normal Bluetooth peripheral.
+English · [한국어](docs/README.ko.md) · [日本語](docs/README.ja.md) · [简体中文](docs/README.zh-Hans.md) · [繁體中文](docs/README.zh-Hant.md)
 
-The in-box Windows Bluetooth stack cannot be a HOGP peripheral (it blocks
-publishing the Device Information Service). WinUC therefore drives a USB
-Bluetooth dongle directly in user space via [Google bumble](https://github.com/google/bumble),
-with the dongle bound to the WinUSB driver.
+![Glideleaf English control panel showing Bluetooth pairing instructions and the Windows-to-iPad screen layout](docs/images/control-panel-en.png)
 
-```
-┌─ Windows ────────────────────────────────┐      ┌─ iPad ─────────┐
-│ WH_MOUSE_LL / WH_KEYBOARD_LL  (swallow)   │      │                │
-│ Raw Input WM_INPUT            (raw delta) │ BLE  │  seen as a      │
-│        │                                  ├──────▶  standard mouse │
-│  edge state machine → HID reports → bumble│ HOGP │  + keyboard     │
-│              (HOGP peripheral)            │      │                │
-└──────────────────────────────────────────┘      └────────────────┘
-```
+*Actual Windows UI with simulated connection state. This screenshot is not evidence of a physical iPad connection.*
+
+## Project status
+
+**Developer preview / alpha.** The implementation includes a tray UI, adapter setup, persistent BLE bonding, screen-edge switching, keyboard mapping and nine UI languages. This fork has automated tests and desktop UI verification. Physical adapter/iPad pairing, long-session input, sleep/resume, and clean-machine installer validation remain open. No production-readiness claim or prebuilt binary release is made.
+
+Glideleaf is an independently maintained derivative of [fuba/winuc](https://github.com/fuba/winuc). Its original Git history and MIT copyright are preserved. Thank you, fuba, for making this project possible.
 
 ## Requirements
 
-- Windows 10/11, and (for running from source) Python 3.10+
-- **One USB Bluetooth dongle** that WinUC takes over
-  - Realtek RTL8761B-family dongles are the tested reference
-  - ⚠ While bound to WinUSB, that dongle can't be used for normal Bluetooth
-    (earbuds, controllers). Use a **dedicated dongle** if you want both.
-- An iPad on iPadOS 13.4+ (15+ recommended for keyboard shortcuts)
+| Component | Requirement |
+| --- | --- |
+| PC | Windows 10 or Windows 11 |
+| Python | 3.10+ for running from source; CI covers the versions in the workflow |
+| USB Bluetooth adapter | A dedicated adapter supported by Bumble; upstream's reference hardware is the Realtek RTL8761B family |
+| Driver | WinUSB binding for the adapter used by Glideleaf |
+| iPad | iPadOS 13.4+ according to upstream; keyboard shortcuts are better supported on 15+ |
+| iPad app / cloud account | Neither is required |
 
-## Install (end users)
+While switched to WinUSB, this adapter cannot also serve headphones, gamepads or other normal Bluetooth devices. Keep another adapter for those devices. Other chipsets listed in the code are candidates, not a claim that this fork has tested them.
 
-Download and run **WinUC-Setup.exe** from the
-[Releases](https://github.com/fuba/winuc/releases) page. It installs the app,
-optionally starts it at sign-in, and launches the **setup wizard**:
-
-1. The wizard detects your Bluetooth dongle.
-2. Click **Switch to WinUSB** (one UAC prompt) to hand the dongle to WinUC.
-3. On your iPad, open **Settings › Bluetooth** and connect to
-   "Windows Pointer & Keyboard".
-4. Push the mouse into your chosen screen edge to cross over.
-
-WinUC then lives in the system tray. Right-click the tray icon for
-**Enabled**, **Settings…**, **Setup / Dongle…**, **Start at sign-in**, and
-**Quit**. The tray icon color shows status (grey = stopped, blue = waiting,
-green = actively controlling the iPad, red = error).
-
-To go back to normal Bluetooth on the dongle, open **Setup / Dongle…** and click
-**Restore normal Bluetooth** (the uninstaller does this automatically too).
-
-## Run from source (developers)
+## Run from source on Windows
 
 ```powershell
+git clone https://github.com/octxxiii/glideleaf.git
+cd glideleaf
 python -m venv .venv
-.venv\Scripts\pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
 
-# Realtek firmware (from the Linux kernel firmware repo)
-.venv\Scripts\bumble-rtk-fw-download.exe --output-dir firmware
+# Fetch the Realtek firmware if using a Realtek adapter.
+.\.venv\Scripts\bumble-rtk-fw-download.exe --output-dir firmware
 
-# Optional: fetch wdi-simple.exe for automatic WinUSB switching
-powershell -ExecutionPolicy Bypass -File scripts\fetch_wdi.ps1
+# First-time adapter setup. Driver changes require an administrator prompt.
+.\.venv\Scripts\pythonw.exe -m glideleaf --setup
 
-python -m winuc --tray        # GUI tray app
-python -m winuc --setup       # just the setup wizard
-python -m winuc               # headless console mode (v1 behaviour)
-python -m winuc --selftest    # validate the BLE layer with no dongle
+# Start the tray app and control panel.
+.\.venv\Scripts\pythonw.exe -m glideleaf --tray
 ```
 
-If you prefer not to automate the driver switch, `scripts\setup_dongle.ps1`
-launches Zadig, and `scripts\restore_dongle.ps1` restores the in-box driver.
+The original `python -m winuc` entry point is retained for compatibility. `python -m glideleaf` without GUI flags runs the console mode.
 
-## Building the installer
+### Set up the adapter
+
+The setup window detects a USB Bluetooth adapter. Automatic WinUSB switching requires the optional `wdi-simple.exe` tool. It is **not included** in this source repository. Prefer a verified build from [libwdi](https://github.com/pbatard/libwdi); `scripts/fetch_wdi.ps1` downloads an unofficial community binary and is an explicit opt-in.
+
+Alternatively, run `scripts/setup_dongle.ps1` and follow its Zadig instructions. The setup GUI reports an error if the automatic tool is missing; it does not silently install it. Restore the selected adapter through **Adapter setup / restore** before uninstalling. Do not switch an adapter that you rely on for your only keyboard or mouse.
+
+### Pair and use
+
+1. Start the connection in Glideleaf.
+2. On iPad, open **Settings → Bluetooth** and choose **Windows Pointer & Keyboard** (or the Bluetooth name configured in settings).
+3. Push past the chosen Windows screen edge to control iPad. The default is the right edge.
+4. Push back through the shared edge, or press **Ctrl+Alt+Q**, to return to Windows.
+
+The return position is estimated from sent relative motion. iPadOS applies its own pointer acceleration, so physical-device tuning is still necessary.
+
+## What works in the implementation
+
+| Capability | Implementation / limits |
+| --- | --- |
+| Mouse, buttons, scrolling | BLE HID reports; speed, natural scrolling and extra-button scroll actions |
+| Keyboard and media keys | HID keyboard/consumer reports, Alt/Win remapping and Japanese JIS mappings |
+| Screen-edge switching | Push-through resistance, push-back return and emergency shortcut |
+| Reconnection | Persisted BLE bonding; physical sleep/resume testing remains open |
+| Desktop controls | Tray, connection panel, settings, adapter setup, bounded logs |
+| Languages | English, 한국어, 日本語, 简体中文, 繁體中文, Español, Français, Deutsch, Português (Brasil) |
+| File drag-and-drop | Not implemented |
+| Shared clipboard | Not implemented |
+| Screen mirroring / remote desktop | Not provided |
+
+Open **Pointer & keyboard → Language** to choose a language. System-language detection is the default. Language-only changes keep the BLE session running. See [language support and translation contributions](LANGUAGES.md).
+
+![Glideleaf Japanese settings window with language selection and pointer controls](docs/images/settings-ja.png)
+
+## How it works
+
+```text
+Windows hooks + Raw Input
+        ↓
+screen-edge state machine
+        ↓
+HID mouse / keyboard / media reports
+        ↓
+Bumble Bluetooth stack → WinUSB USB adapter → BLE HOGP → iPad
+```
+
+Glideleaf uses [Google Bumble](https://github.com/google/bumble) to control the adapter in userspace, rather than relying on Windows' normal Bluetooth peripheral APIs. Pairing keys stay on the PC. Input reports travel over the BLE link; the application does not use a cloud relay.
+
+## FAQ
+
+### Is this Universal Control for Windows?
+
+It provides the mouse/keyboard screen-edge interaction that people look for under that phrase. It does not implement Apple's Continuity protocol, file transfer, clipboard sharing or screen mirroring, and is not affiliated with Apple.
+
+### Can I use the built-in Bluetooth radio?
+
+The documented path uses a dedicated USB adapter bound to WinUSB. A normal Windows-managed radio is not a drop-in replacement. Do not assume an internal radio is supported.
+
+### Can I use it without a USB dongle?
+
+Not through the supported setup described here. No-dongle operation is not claimed.
+
+### Does it need Wi-Fi or an iPad app?
+
+Input forwarding uses Bluetooth LE HID. No Wi-Fi relay or iPad-side application is used by this implementation. A separate USB adapter and driver setup are still required on Windows.
+
+### Does it support Japanese keyboards?
+
+The implementation has JIS conversion-key mappings and Alt/Win modifier swapping. Set the matching hardware-keyboard layout in iPadOS. UI language is independent of keyboard layout; actual hardware combinations need testing.
+
+### What data is stored?
+
+For compatibility with upstream, configuration, pairing keys and logs remain in `%LOCALAPPDATA%\WinUC`. The autostart registry value also retains the legacy name. Pairing data is not committed to the repository. Never attach pairing keys to a bug report.
+
+## Development and validation
 
 ```powershell
-packaging\build.ps1
+.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe -m glideleaf --selftest
+.\.venv\Scripts\python.exe scripts/verify_gui.py --language ja
 ```
 
-This downloads the Realtek firmware, runs PyInstaller (`dist\WinUC\`), and — if
-[Inno Setup 6](https://jrsoftware.org/isdl.php) is installed — compiles
-`dist\installer\WinUC-Setup-*.exe`.
+The virtual BLE integration test pairs two Bumble controllers, discovers HID services, subscribes and checks received reports without a physical adapter. Windows CI runs automated tests; GUI screenshots are local checks with simulated states. These checks do not replace device testing.
 
-`wdi-simple.exe` (for automatic WinUSB switching) is **not** bundled by default,
-because redistributing it (libwdi, LGPL-3.0) requires shipping the LGPL license
-text and a source link. To include it deliberately, place a `wdi-simple.exe`
-under `tools\` (via `scripts\fetch_wdi.ps1` or your own libwdi build) before
-running the build. Without it, the setup wizard falls back to manual Zadig
-(`scripts\setup_dongle.ps1`).
+See [contributing](CONTRIBUTING.md), [hardware validation](docs/HARDWARE_VALIDATION.md), [security reporting](SECURITY.md), and [changes](CHANGELOG.md).
 
-## Settings
+### Build a local executable
 
-Settings live in the tray **Settings…** dialog (stored at
-`%LOCALAPPDATA%\WinUC\config.json`).
+```powershell
+.\.venv\Scripts\python.exe -m pip install pyinstaller
+powershell -ExecutionPolicy Bypass -File packaging/build.ps1
+```
 
-| Setting | Default | Meaning |
-|---|---|---|
-| iPad edge | `right` | Which screen edge crosses to the iPad (`right`/`left`/`top`/`bottom`) |
-| Pointer speed | `1.0` | Multiplier for motion sent to the iPad |
-| Push-through / push-back distance | `80` px | Resistance before crossing / returning (the macOS "push through the edge" feel) |
-| Natural scrolling | off | Invert scroll direction |
-| iPad screen (pt) | `1194 × 834` | Used to estimate the return position |
-| Swap Alt / Win | off | Use Alt as ⌘ instead of the Win key |
-| JIS 変換/無変換 → かな/英数 | on | Map JIS conversion keys to Kana/Eisū |
-| Force-return hotkey | `ctrl+alt+q` | Immediately return control to Windows |
-| Mouse button actions | — | Assign `drag_scroll` / `wheel_up` / `wheel_down` to buttons `x1`/`x2`/`middle` |
+Output is `dist/Glideleaf/Glideleaf.exe`. Inno Setup 6 is needed to produce an installer. Build scripts collect installed Python dependency notices; native libraries, firmware and optional driver-tool redistribution still need the review described in [third-party notices](THIRD_PARTY_NOTICES.md). A successful local build is not a release certification.
 
-**Key mapping:** Win → ⌘ Command, Alt → ⌥ Option, Ctrl → Control (remappable in
-iPadOS Settings › Hardware Keyboard › Modifier Keys). Media keys work. On the
-iPad, set Settings › General › Keyboard › Hardware Keyboard › **Keyboard Type =
-JIS** for a JIS keyboard.
+## License and thanks
 
-**Mouse buttons → scroll:** X-Mouse Button Control's scroll conversion sends
-window messages that can't be captured, so assign scroll actions here instead —
-WinUC does the conversion natively while you're controlling the iPad.
+Project code is [MIT](LICENSE). Original **Copyright (c) 2026 fuba** remains intact. Third-party dependencies retain their own licenses.
 
-## Differences from macOS Universal Control
+> WinUCを作り、公開してくださったfubaさんに感謝します。あなたの取り組みがGlideleafの出発点になりました。
 
-| Feature | macOS | WinUC |
-|---|---|---|
-| Cursor / keyboard edge crossing | ✅ | ✅ |
-| Push-through resistance & push-back return | ✅ | ✅ |
-| Scrolling & media keys | ✅ | ✅ |
-| Automatic reconnect | ✅ | ✅ (persisted bonding) |
-| File drag & drop | ✅ | ❌ not possible |
-| Universal Clipboard | ✅ | ❌ not possible |
-
-Drag-and-drop and clipboard sharing use Apple's Continuity over Wi-Fi (AWDL),
-which cannot be reproduced over a Bluetooth HID link without an app on the iPad.
-
-Other limits: capture pauses during UAC / secure-desktop prompts; `Ctrl+Alt+Del`
-is reserved by Windows; iPadOS applies its own pointer acceleration (tune speed
-on the iPad).
-
-## Project layout
-
-| Module | Role |
-|---|---|
-| `winuc/hid_reports.py` | HID report descriptor & report packing |
-| `winuc/keymap.py` | Set-1 scancode → HID usage (incl. JIS) |
-| `winuc/ble_peripheral.py` | bumble HOGP peripheral (HID/Battery/DIS, Just-Works bonding) |
-| `winuc/capture.py` | LL hooks + Raw Input + ClipCursor input capture |
-| `winuc/edge.py` | LOCAL→PUSHING→REMOTE state machine (pure logic) |
-| `winuc/app.py` | Hook-thread ↔ asyncio bridge, coalesced sends |
-| `winuc/service.py` | Background service supervisor (start/stop, status) |
-| `winuc/driver.py` | Automatic WinUSB switch/restore (libwdi + pnputil) |
-| `winuc/gui/` | Tray icon, settings dialog, setup wizard |
-| `winuc/selftest.py` | Virtual two-controller integration check |
-
-## License
-
-[MIT](LICENSE). Dependency [bumble](https://github.com/google/bumble) is
-Apache-2.0. `wdi-simple.exe` (bundled at build time) comes from
-[libwdi](https://github.com/pbatard/libwdi) and is LGPL-3.0, shipped as a
-separate invoked executable. Realtek firmware is not included in the repository;
-it is downloaded from the Linux kernel firmware repo during setup.
+Thank you, fuba, for creating and sharing WinUC. Glideleaf keeps the upstream history and attribution, and adds multilingual UI, diagnostics and reliability work. This is an independent project, not an official fuba or Apple product.

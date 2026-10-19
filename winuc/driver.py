@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import ctypes
 import logging
+import os
 import re
 import subprocess
 import sys
@@ -165,10 +166,11 @@ def find_dongle(vid: int | None = None, pid: int | None = None) -> Dongle | None
 
 def _run(cmd: list[str], timeout: int = 180) -> subprocess.CompletedProcess:
     logger.info("run: %s", " ".join(cmd))
-    return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, check=False)
+    return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, check=False,
+                          creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
 
 
-def install_winusb(vid: int, pid: int, name: str = "WinUC Bluetooth") -> None:
+def install_winusb(vid: int, pid: int, name: str = "Glideleaf Bluetooth") -> None:
     """Force-bind the dongle to WinUSB using wdi-simple. Requires admin."""
     exe = wdi_simple_path()
     if exe is None:
@@ -194,32 +196,35 @@ def _enum_winusb_oem_infs(vid: int, pid: int) -> list[str]:
     """Find oemNN.inf packages that bind our VID/PID to WinUSB."""
     result = _run(["pnputil", "/enum-drivers"], timeout=60)
     infs: list[str] = []
-    current = None
     hwid = f"VID_{vid:04X}&PID_{pid:04X}".lower()
-    block: list[str] = []
-    for line in result.stdout.splitlines():
-        if line.strip().lower().startswith("published name"):
-            if current and _block_matches(block, hwid):
-                infs.append(current)
-            current = line.split(":", 1)[1].strip()
-            block = []
-        else:
-            block.append(line.lower())
-    if current and _block_matches(block, hwid):
-        infs.append(current)
+    if result.returncode != 0:
+        raise RuntimeError("Could not enumerate installed driver packages")
+    # OEM filenames survive OS localization. Check the actual hardware ID.
+    directory = Path(os.environ.get("WINDIR", r"C:\Windows")) / "INF"
+    for name in dict.fromkeys(re.findall(r"\boem\d+\.inf\b", result.stdout.lower())):
+        try:
+            raw = (directory / name).read_bytes()
+            text = raw.decode("utf-16" if raw.startswith((b"\xff\xfe", b"\xfe\xff")) else "utf-8-sig")
+        except (OSError, UnicodeError):
+            continue  # Never delete a package we could not identify.
+        if _block_matches(text.splitlines(), hwid):
+            infs.append(name)
     return infs
 
 
 def _block_matches(block: list[str], hwid: str) -> bool:
-    text = "\n".join(block)
-    return "winusb" in text or hwid in text
+    text = "\n".join(block).lower()
+    return "winusb" in text and re.search(re.escape(hwid.lower()) + r"(?![0-9a-f])", text) is not None
 
 
 def restore_inbox(vid: int, pid: int) -> None:
     """Remove the WinUSB package and let Windows reapply the in-box driver."""
     for inf in _enum_winusb_oem_infs(vid, pid):
-        _run(["pnputil", "/delete-driver", inf, "/uninstall", "/force"], timeout=120)
-    _run(["pnputil", "/scan-devices"], timeout=60)
+        result = _run(["pnputil", "/delete-driver", inf, "/uninstall", "/force"], timeout=120)
+        if result.returncode != 0:
+            raise RuntimeError(f"Could not restore driver package {inf}: {result.stderr.strip()}")
+    if _run(["pnputil", "/scan-devices"], timeout=60).returncode != 0:
+        raise RuntimeError("Windows device scan failed")
 
 
 # ------------------------------------------------------------- elevation
@@ -274,7 +279,7 @@ def _relaunch_elevated(args: list[str], wait: bool = True) -> int:
     return code.value
 
 
-def install_winusb_elevated(vid: int, pid: int, name: str = "WinUC Bluetooth") -> None:
+def install_winusb_elevated(vid: int, pid: int, name: str = "Glideleaf Bluetooth") -> None:
     if is_admin():
         install_winusb(vid, pid, name)
         return

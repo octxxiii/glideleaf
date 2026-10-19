@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+from logging.handlers import RotatingFileHandler
 import os
 import sys
 from pathlib import Path
@@ -35,7 +36,7 @@ def _setup_logging(verbose: bool, to_file: bool) -> None:
     handlers: list[logging.Handler] = [logging.StreamHandler()]
     if to_file:
         try:
-            handlers.append(logging.FileHandler(log_path(), encoding="utf-8"))
+            handlers.append(RotatingFileHandler(log_path(), maxBytes=2_000_000, backupCount=3, encoding="utf-8"))
         except OSError:
             pass
     logging.basicConfig(
@@ -50,8 +51,8 @@ def _setup_logging(verbose: bool, to_file: bool) -> None:
 def main() -> int:
     _fix_console_encoding()
     parser = argparse.ArgumentParser(
-        prog="winuc",
-        description="WinUC - Universal Control for Windows (control an iPad from your PC)",
+        prog="glideleaf",
+        description="Glideleaf - share your Windows mouse and keyboard with iPad over Bluetooth LE",
     )
     parser.add_argument("--config", default=None, help="Path to a config file")
     parser.add_argument("--tray", action="store_true", help="Run as a system-tray app (GUI)")
@@ -91,6 +92,8 @@ def main() -> int:
 
     config_file = Path(args.config) if args.config else config_path()
     config = Config.load(config_file)
+    from .i18n import set_language
+    set_language(config.language)
     if not config_file.exists():
         config.save(config_file)
 

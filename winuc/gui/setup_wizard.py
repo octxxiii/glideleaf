@@ -12,6 +12,7 @@ from ..diagnostics import build_report, report_text
 from ..i18n import t
 from ..native_driver import RebootRequired
 from .theme import configure, font_family
+from .icons import apply_window_icon, make_icon
 
 
 class SetupWizard:
@@ -34,17 +35,23 @@ class SetupWizard:
         self._rows: dict[str, driver.Dongle] = {}
         self.win = tk.Toplevel(root)
         self.win.title(t("Glideleaf 동글 설정"))
-        self.win.geometry("960x760")
-        self.win.minsize(840, 650)
+        apply_window_icon(self.win)
+        self.win.geometry("920x680")
+        self.win.minsize(820, 620)
         self.win.protocol("WM_DELETE_WINDOW", self._close)
         self.win.columnconfigure(0, weight=1)
         self.win.rowconfigure(0, weight=1)
-        frm = ttk.Frame(self.win, padding=20)
+        frm = ttk.Frame(self.win, padding=24)
         frm.grid(sticky="nsew")
         frm.columnconfigure(0, weight=1)
         frm.rowconfigure(2, weight=1)
-        ttk.Label(frm, text=t("전용 동글 연결하기"), font=(font_family(), 16, "bold")).grid(row=0, column=0, sticky="w", pady=(0, 8))
-        ttk.Label(frm, text=t("목록에서 동글을 선택하고 동글 연결을 누르세요. 이미 준비된 동글은 적용 후 바로 사용할 수 있습니다."), wraplength=850).grid(row=1, column=0, sticky="w", pady=(0, 14))
+        from PIL import ImageTk
+        self.brand_icon = ImageTk.PhotoImage(make_icon(None, 40), master=self.win)
+        heading = ttk.Frame(frm)
+        heading.grid(row=0, column=0, sticky="w", pady=(0, 7))
+        ttk.Label(heading, image=self.brand_icon).pack(side="left", padx=(0, 10))
+        ttk.Label(heading, text=t("전용 동글 연결하기"), font=(font_family(), 18, "bold")).pack(side="left")
+        ttk.Label(frm, text=t("목록에서 동글을 선택하고 동글 연결을 누르세요. 이미 준비된 동글은 적용 후 바로 사용할 수 있습니다."), wraplength=830).grid(row=1, column=0, sticky="w", pady=(0, 17))
         table_frame = ttk.Frame(frm)
         table_frame.grid(row=2, column=0, sticky="nsew")
         table_frame.columnconfigure(0, weight=1)
@@ -59,17 +66,18 @@ class SetupWizard:
         horizontal = ttk.Scrollbar(table_frame, orient="horizontal", command=self.devices.xview)
         horizontal.grid(row=1, column=0, sticky="ew")
         self.devices.configure(yscrollcommand=scrollbar.set, xscrollcommand=horizontal.set)
+        self.devices.tag_configure("alternate", background="#F7FAFA")
         self.devices.bind("<<TreeviewSelect>>", self._select)
         self.status_var = tk.StringVar(value=t("블루투스 동글 검색 중…"))
-        ttk.Label(frm, textvariable=self.status_var, wraplength=850, justify="left").grid(row=3, column=0, sticky="w", pady=12)
-        self.detail = tk.Text(frm, height=6, width=80, state="disabled", wrap="word")
-        self.detail.grid(row=4, column=0, sticky="ew", pady=(0, 12))
+        ttk.Label(frm, textvariable=self.status_var, wraplength=830, justify="left", font=(font_family(), 10, "bold")).grid(row=3, column=0, sticky="w", pady=(15, 12))
+        self.detail = tk.Text(frm, height=4, width=80, state="disabled", wrap="word", bg="#FFFFFF", fg="#53697A", relief="flat", padx=11, pady=9, font=(font_family(), 9))
+        self.detail.grid(row=4, column=0, sticky="ew", pady=(0, 15))
         actions = ttk.Frame(frm)
         actions.grid(row=5, column=0, sticky="ew")
         self.apply_btn = ttk.Button(actions, text=t("선택한 동글 적용"), command=self._apply_selected, state="disabled", style="Primary.TButton")
         self.apply_btn.pack(side="left")
         self.action_btn = ttk.Button(actions, text=t("동글 연결"), command=self._install, state="disabled")
-        self.action_btn.pack(side="left", padx=8)
+        self.action_btn.pack(side="left", padx=10)
         self.refresh_btn = ttk.Button(actions, text=t("다시 검색"), command=self.refresh)
         self.refresh_btn.pack(side="left")
         ttk.Button(actions, text=t("닫기"), command=self._close).pack(side="right")
@@ -103,7 +111,7 @@ class SetupWizard:
             self._rows[row] = dongle
             binding = {"winusb": "WinUSB", "inbox": t("Windows Bluetooth"), "unknown": t("확인 필요")}[dongle.driver]
             applied = t("적용됨") if dongle.identity == self._active_adapter_id else ""
-            self.devices.insert("", "end", iid=row, values=(dongle.label, f"{dongle.vid:04X}:{dongle.pid:04X}", binding, dongle.location or "—", applied))
+            self.devices.insert("", "end", iid=row, values=(dongle.label, f"{dongle.vid:04X}:{dongle.pid:04X}", binding, dongle.location or "—", applied), tags=("alternate",) if index % 2 else ())
             if dongle.identity == self._preview_id:
                 self.devices.selection_set(row)
                 self.devices.focus(row)

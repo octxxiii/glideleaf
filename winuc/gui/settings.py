@@ -12,6 +12,7 @@ from typing import Callable
 
 from ..config import Config
 from .theme import configure, font_family
+from .icons import apply_window_icon
 
 _EDGE_LABELS = {"right": "오른쪽", "left": "왼쪽", "top": "위쪽", "bottom": "아래쪽"}
 _ACTION_LABELS = {"(none)": "사용 안 함", "drag_scroll": "누른 채 움직여 스크롤", "wheel_up": "위로 스크롤", "wheel_down": "아래로 스크롤"}
@@ -36,6 +37,7 @@ class SettingsWindow:
         self.on_apply = on_apply
         self.win = tk.Toplevel(root)
         self.win.title(t("Glideleaf 설정"))
+        apply_window_icon(self.win)
         self.win.resizable(False, False)
 
         self.vars: dict[str, tk.Variable] = {}

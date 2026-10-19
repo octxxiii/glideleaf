@@ -1,10 +1,11 @@
 """Shared, dependency-free desktop palette."""
 from tkinter import ttk
 
-BG = "#F3F5FA"
-INK = "#172238"
-MUTED = "#63718A"
-BLUE = "#315CE8"
+BG = "#F4F7F8"
+INK = "#15283D"
+MUTED = "#53697A"
+BLUE = "#176D67"
+LINE = "#DCE6E7"
 
 
 def font_family():
@@ -18,10 +19,18 @@ def configure(root):
     style.configure(".", font=(font_family(), 10), background=BG, foreground=INK)
     style.configure("TFrame", background=BG)
     style.configure("TLabel", background=BG)
-    style.configure("TButton", padding=(14, 9), background="#FFFFFF", borderwidth=1)
-    style.map("TButton", background=[("active", "#E8EDFB")])
+    style.configure("TButton", padding=(15, 10), background="#FFFFFF", foreground=INK, borderwidth=1, relief="flat")
+    style.map("TButton", background=[("active", "#EAF3F0"), ("disabled", "#F0F3F3")],
+              foreground=[("disabled", "#8DA0A8"), ("active", INK)])
     style.configure("Primary.TButton", background=BLUE, foreground="white", borderwidth=0)
-    style.map("Primary.TButton", background=[("disabled", "#A9B7E2"), ("active", "#2449C5")], foreground=[("disabled", "#FFFFFF")])
+    style.map("Primary.TButton", background=[("disabled", "#A9CAC4"), ("active", "#105A55")], foreground=[("disabled", "#FFFFFF"), ("active", "#FFFFFF")])
+    style.configure("TLabel", foreground=INK)
+    style.configure("Treeview", font=(font_family(), 10), rowheight=35, background="#FFFFFF",
+                    fieldbackground="#FFFFFF", foreground=INK, borderwidth=0)
+    style.configure("Treeview.Heading", font=(font_family(), 9, "bold"), padding=(10, 11),
+                    background="#EAF0F0", foreground=MUTED, borderwidth=0)
+    style.map("Treeview", background=[("selected", "#D9EEE8")], foreground=[("selected", INK)])
+    style.map("Treeview.Heading", background=[("active", "#DFEAE8")])
     style.configure("TNotebook", borderwidth=0)
     style.configure("TNotebook.Tab", padding=(16, 10))
     style.map("TNotebook.Tab", background=[("selected", "white")], foreground=[("selected", BLUE)])

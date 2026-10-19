@@ -1,33 +1,37 @@
-"""Tray icon images, drawn in code so no asset files are needed."""
-
+"""Glideleaf mark shared by the window, tray, and Windows executable."""
 from __future__ import annotations
 
 from PIL import Image, ImageDraw
 
-# Status -> accent color for the dot.
-_COLORS = {
-    "stopped": (120, 120, 120),
-    "starting": (230, 180, 40),
-    "advertising": (60, 140, 230),
-    "connected": (60, 140, 230),
-    "ready": (60, 200, 110),
-    "error": (220, 70, 70),
+_STATUS = {
+    "stopped": "#A5B1C4", "starting": "#F4BA55",
+    "advertising": "#67B4FF", "connected": "#67B4FF",
+    "ready": "#56D5A5", "error": "#FF7D78",
 }
 
 
-def make_icon(status: str = "stopped", size: int = 64) -> Image.Image:
-    color = _COLORS.get(status, _COLORS["stopped"])
-    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    d = ImageDraw.Draw(img)
-    # Rounded dark square background.
-    d.rounded_rectangle([2, 2, size - 3, size - 3], radius=size // 5, fill=(38, 40, 46, 255))
-    # A pointer-ish glyph: a small circle (cursor) plus a bar (keyboard).
-    cx, cy = size // 2, size // 2 - 6
-    r = size // 6
-    d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=color)
-    d.rounded_rectangle(
-        [size // 4, size - size // 3, size - size // 4, size - size // 5],
-        radius=3,
-        fill=color,
-    )
-    return img
+def make_icon(status: str | None = "stopped", size: int = 64) -> Image.Image:
+    """Draw at 4x for crisp tray icons and high-resolution application icons."""
+    scale = 4
+    canvas = Image.new("RGBA", (size * scale, size * scale), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(canvas)
+    def points(*values):
+        return tuple(round(value * size * scale / 64) for value in values)
+
+    draw.rounded_rectangle(points(2, 2, 62, 62), radius=round(15 * size * scale / 64), fill="#14243D")
+    # Tapered leaf and a short vein retain their shape at 16 px.
+    draw.ellipse(points(16, 15, 49, 48), fill="#6DE1BE")
+    draw.polygon([points(17, 46), points(19, 28), points(48, 15), points(45, 36), points(29, 49)], fill="#6DE1BE")
+    draw.line([points(18, 49), points(39, 28)], fill="#D7FFF1", width=max(2, round(3 * size * scale / 64)), joint="curve")
+    draw.line([points(30, 37), points(29, 29)], fill="#D7FFF1", width=max(2, round(2 * size * scale / 64)))
+    if status is not None:
+        draw.ellipse(points(45, 43, 61, 59), fill="#14243D")
+        draw.ellipse(points(48, 46, 58, 56), fill=_STATUS.get(status, _STATUS["stopped"]))
+    return canvas.resize((size, size), Image.Resampling.LANCZOS)
+
+
+def apply_window_icon(window) -> None:
+    """Keep a Tk image reference alive for the title bar and task switcher."""
+    from PIL import ImageTk
+    window._glideleaf_icon = ImageTk.PhotoImage(make_icon(None, 64), master=window)
+    window.iconphoto(False, window._glideleaf_icon)

@@ -8,7 +8,8 @@ import tkinter as tk
 from tkinter import ttk
 
 from ..paths import log_path
-from .theme import BG, INK, MUTED, BLUE, configure, font_family
+from .theme import BG, INK, MUTED, BLUE, LINE, configure, font_family
+from .icons import apply_window_icon, make_icon
 
 
 STATUS = {
@@ -27,9 +28,10 @@ class Dashboard:
         self.app = app
         self.win = tk.Toplevel(app.root)
         self.win.title(t("Glideleaf · 연결 패널"))
+        apply_window_icon(self.win)
         configure(app.root)
-        self.win.geometry("740x880")
-        self.win.minsize(700, 850)
+        self.win.geometry("740x820")
+        self.win.minsize(700, 780)
         self.win.configure(bg=BG)
         self._timer = None
         self._last_log = None
@@ -39,11 +41,15 @@ class Dashboard:
         body.pack(fill="both", expand=True)
         header = ttk.Frame(body)
         header.pack(fill="x")
+        from PIL import ImageTk
+        self.brand_icon = ImageTk.PhotoImage(make_icon(None, 48), master=self.win)
+        ttk.Label(header, image=self.brand_icon).pack(side="left", padx=(0, 11))
         ttk.Label(header, text="Glideleaf", font=("Segoe UI", 25, "bold")).pack(side="left")
         ttk.Label(header, text="PC → iPad   /   INPUT SHARING", foreground=MUTED, font=("Segoe UI", 9)).pack(side="right")
         ttk.Label(body, text=t("익숙한 마우스와 키보드, iPad에서도 그대로."), foreground=MUTED, wraplength=650, padding=(0, 4, 0, 22)).pack(anchor="w")
-        card = tk.Frame(body, bg="white", padx=22, pady=20, highlightbackground="#E0E6F0", highlightthickness=1)
-        card.pack(fill="x")
+        card = tk.Frame(body, bg="white", padx=24, pady=20, highlightbackground=LINE, highlightthickness=1)
+        card.pack(fill="x", pady=(0, 2))
+        self.card = card
         self.badge = tk.Label(card, text="●", bg="white", fg=BLUE, font=("Segoe UI", 14))
         self.badge.pack(anchor="w")
         self.title = tk.StringVar()
@@ -54,7 +60,7 @@ class Dashboard:
         self.toggle.pack(anchor="w", pady=(18, 0))
         self.error = tk.StringVar()
         self.error_label = tk.Label(body, textvariable=self.error, bg=BG, fg="#B42318", wraplength=620, justify="left")
-        self.diagram = tk.Canvas(body, height=132, bg=BG, highlightthickness=0)
+        self.diagram = tk.Canvas(body, height=116, bg=BG, highlightthickness=0)
         self.diagram.pack(fill="x", pady=(16, 0))
         self.diagram.bind("<Configure>", lambda event: self.draw_devices())
         self.device = tk.StringVar()
@@ -67,9 +73,13 @@ class Dashboard:
         ttk.Label(body, text=t("① 전용 USB 동글 준비   →   ② iPad에서 Bluetooth 페어링\n③ 선택한 화면 가장자리를 밀어 제어 이동"), foreground=MUTED, wraplength=650, justify="left").pack(anchor="w")
         footer = ttk.Frame(body)
         footer.pack(fill="x", pady=(18, 0))
-        self.log_toggle = ttk.Button(footer, text=t("진단 로그 펼치기"), command=self.toggle_logs)
+        self.log_toggle = tk.Button(footer, text=t("진단 로그 펼치기"), command=self.toggle_logs,
+                                    bg="#FFFFFF", fg=INK, activebackground="#EAF3F0", activeforeground=INK,
+                                    relief="flat", padx=14, pady=9, font=(font_family(), 10))
         self.log_toggle.pack(side="left")
-        ttk.Button(footer, text=t("오픈소스 정보"), command=self.show_about).pack(side="right")
+        tk.Button(footer, text=t("오픈소스 정보"), command=self.show_about,
+                  bg="#FFFFFF", fg=INK, activebackground="#EAF3F0", activeforeground=INK,
+                  relief="flat", padx=14, pady=9, font=(font_family(), 10)).pack(side="right")
         self.logs = ttk.Frame(body)
         self.log = tk.Text(self.logs, height=4, wrap="word", state="disabled", bg="#E9EDF5", fg=INK, relief="flat", font=("Consolas", 9), padx=10, pady=8)
         self.log.pack(fill="both", expand=True)
@@ -81,23 +91,24 @@ class Dashboard:
         canvas.delete("all")
         width = max(600, canvas.winfo_width())
         left, right = ("iPad", "Windows PC") if self.app.config.edge == "left" else ("Windows PC", "iPad")
-        for x, label in ((width / 2 - 210, left), (width / 2 + 30, right)):
-            canvas.create_rectangle(x, 10, x + 180, 102, fill="white", outline="#CFD8E8", width=2)
-            canvas.create_text(x + 90, 52, text=label, fill=INK, font=("Segoe UI", 12, "bold"))
-            canvas.create_line(x + 60, 112, x + 120, 112, fill="#B5C2D8", width=3)
-        canvas.create_text(width / 2, 50, text="↔", fill=BLUE, font=("Segoe UI", 24))
+        for x, label in ((width / 2 - 218, left), (width / 2 + 38, right)):
+            canvas.create_rectangle(x, 8, x + 180, 84, fill="white", outline=LINE, width=1)
+            canvas.create_rectangle(x, 8, x + 180, 12, fill="#B9E7D8", outline="")
+            canvas.create_text(x + 90, 48, text=label, fill=INK, font=("Segoe UI", 12, "bold"))
+        canvas.create_line(width / 2 - 37, 46, width / 2 + 37, 46, fill=BLUE, width=2)
+        canvas.create_oval(width / 2 - 5, 41, width / 2 + 5, 51, fill=BLUE, outline="white", width=2)
         edge = EDGES[self.app.config.edge]
-        canvas.create_text(width / 2, 88, text=t("{edge} 연결", edge=t(edge)), fill=MUTED, font=(font_family(), 9))
+        canvas.create_text(width / 2, 99, text=t("{edge} 연결", edge=t(edge)), fill=MUTED, font=(font_family(), 9))
 
     def toggle_logs(self):
         if self.logs.winfo_manager():
             self.logs.pack_forget()
             self.log_toggle.configure(text=t("진단 로그 펼치기"))
-            self.win.geometry("740x880")
+            self.win.geometry("740x820")
         else:
             self.logs.pack(fill="both", expand=True, pady=(12, 0))
             self.log_toggle.configure(text=t("진단 로그 접기"))
-            self.win.geometry("740x1040")
+            self.win.geometry("740x980")
 
     def show_about(self):
         from tkinter import messagebox
@@ -134,6 +145,7 @@ class Dashboard:
         self.hint.set(t(hint))
         color = "#16845B" if service.status == "ready" else "#C24236" if service.status == "error" else BLUE
         self.badge.configure(fg=color, text="●  " + "Bluetooth LE")
+        self.card.configure(highlightbackground=color if service.status in ("ready", "error") else LINE)
         self.draw_devices()
         self.device.set(t("Bluetooth  ·  {name}\n화면 위치  ·  {edge}\nWindows 긴급 복귀  ·  {hotkey}", name=config.device_name, edge=t(EDGES[config.edge]), hotkey=config.release_hotkey.upper()))
         self.toggle.configure(text=t("연결 중지") if service.running else t("연결 시작"))

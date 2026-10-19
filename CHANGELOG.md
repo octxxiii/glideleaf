@@ -1,6 +1,14 @@
 # Changelog
 
-## Unreleased
+## 0.2.0-alpha.1 — unsigned portable preview
+
+- Added a downloadable Windows portable archive with the generated Glideleaf icon.
+- Refined the multilingual control panel and settings for 1366×768 displays.
+- Added draggable iPad screen arrangement and an adjustable crossing segment.
+- Added native Windows inbox WinUSB setup without Zadig or wdi-simple.
+- Documented current hardware and signing limits in the release notes.
+
+### Earlier changes in this preview
 
 - Setup now lists adapters and lets users explicitly select and apply one.
   Physical identity and a VID/PID-specific transport are persisted; row selection

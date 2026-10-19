@@ -2,7 +2,7 @@
 ; Build the app first (packaging/build.ps1), then compile this with ISCC.exe.
 
 #define AppName "Glideleaf"
-#define AppVersion "0.1.0"
+#define AppVersion "0.2.0-alpha.1"
 #define AppPublisher "Glideleaf contributors"
 #define AppExeName "Glideleaf.exe"
 

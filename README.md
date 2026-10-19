@@ -19,7 +19,7 @@ English · [한국어](docs/README.ko.md) · [日本語](docs/README.ja.md) · [
 
 ## Project status
 
-**Developer preview / alpha.** The implementation includes a tray UI, adapter setup, persistent BLE bonding, screen-edge switching, keyboard mapping and nine UI languages. This fork has automated tests and desktop UI verification. Physical adapter/iPad pairing, long-session input, sleep/resume, and clean-machine installer validation remain open. No production-readiness claim or prebuilt binary release is made.
+**Alpha preview.** The implementation includes a tray UI, adapter setup, persistent BLE bonding, screen-edge switching, keyboard mapping and nine UI languages. This fork has automated tests and desktop UI verification. One user reported connecting a CSR adapter on another PC, but the device details and sustained input/restore checks were not recorded. Hardware compatibility, sleep/resume and clean-machine installation remain unqualified. The [Windows portable prerelease](https://github.com/octxxiii/glideleaf/releases/tag/v0.2.0-alpha.1) is unsigned and is not a production-ready or trusted-publisher release.
 
 Glideleaf is an independently maintained derivative of [fuba/winuc](https://github.com/fuba/winuc). Its original Git history and MIT copyright are preserved. Thank you, fuba, for making this project possible.
 
@@ -37,6 +37,14 @@ Glideleaf is an independently maintained derivative of [fuba/winuc](https://gith
 While switched to WinUSB, this adapter cannot also serve headphones, gamepads or other normal Bluetooth devices. Keep another adapter for those devices. Other chipsets listed in the code are candidates, not a claim that this fork has tested them.
 
 ## Run from source on Windows
+
+For a Python-free preview, download **Glideleaf-0.2.0-alpha.1-win-x64.zip** from
+the [prerelease](https://github.com/octxxiii/glideleaf/releases/tag/v0.2.0-alpha.1),
+extract the entire folder, and run `Glideleaf.exe`. Keep `_internal` beside the
+executable. The portable archive is unsigned, has no installer, and does not
+bundle Realtek firmware. Read the release notes and adapter requirements first.
+
+To run from source instead:
 
 ```powershell
 git clone https://github.com/octxxiii/glideleaf.git

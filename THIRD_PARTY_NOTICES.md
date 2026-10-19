@@ -37,6 +37,10 @@ Python과 Tcl/Tk 및 Pillow wheel 등에 포함된 네이티브 라이브러리 
   빌드 출처와 정확한 대응 소스 제공 조건을 확인하세요. LGPL/GPL 전문을 동봉하고,
   비공식 다운로드 링크를 대응 소스 제공의 대체물로 간주하지 마세요.
   https://github.com/pbatard/libwdi
+  GUI에서 WinUSB 전환에 동의하면 Timocop 커뮤니티 빌드 v1.0을 자동으로
+  내려받습니다. 배포 주소·대응 소스·파일 해시는 docs/DRIVER_TOOL.md에 기록합니다.
+  GPL/LGPL 전문은 winuc/licenses에 보존하며 다운로드한 도구 옆에도 복사합니다.
+  이 실행 파일은 Git 소스 저장소나 기본 앱 빌드에 직접 포함하지 않습니다.
 - Realtek 펌웨어: MIT 프로젝트 코드에 포함되지 않습니다. 실제 다운로드한 파일에
   적용되는 펌웨어 라이선스와 배포 조건을 확인하고 고지문을 함께 제공해야 합니다.
   https://gitlab.com/kernel-firmware/linux-firmware

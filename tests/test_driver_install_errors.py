@@ -6,13 +6,26 @@ import pytest
 from winuc import driver
 
 
-def test_missing_installer_is_reported_before_uac(monkeypatch):
+def test_download_failure_is_reported_before_uac(monkeypatch):
+    from winuc import driver_tool
     monkeypatch.setattr(driver, "wdi_simple_path", lambda: None)
+    monkeypatch.setattr(driver_tool, "ensure_tool", Mock(side_effect=RuntimeError("download failed")))
     elevate = Mock()
     monkeypatch.setattr(driver, "_relaunch_elevated", elevate)
-    with pytest.raises(FileNotFoundError, match="Zadig"):
+    with pytest.raises(RuntimeError, match="download failed"):
         driver.install_winusb_elevated(0x0A12, 1)
     elevate.assert_not_called()
+
+
+def test_missing_installer_is_prepared_before_uac(monkeypatch):
+    from winuc import driver_tool
+    order = []
+    monkeypatch.setattr(driver, "wdi_simple_path", lambda: None)
+    monkeypatch.setattr(driver, "is_admin", lambda: False)
+    monkeypatch.setattr(driver_tool, "ensure_tool", lambda: order.append("download"))
+    monkeypatch.setattr(driver, "_relaunch_elevated", lambda args: order.append("uac") or 0)
+    driver.install_winusb_elevated(0x0A12, 1)
+    assert order == ["download", "uac"]
 
 
 def test_elevated_failure_points_to_persistent_log(monkeypatch, tmp_path):

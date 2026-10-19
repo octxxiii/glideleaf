@@ -92,7 +92,8 @@ def wdi_simple_path() -> Path | None:
     for path in candidates:
         if path.is_file():
             return path
-    return None
+    from .driver_tool import cached_tool
+    return cached_tool()
 
 
 # --------------------------------------------------------------- detection
@@ -302,6 +303,9 @@ def install_winusb(vid: int, pid: int, name: str = "Glideleaf Bluetooth") -> Non
         raise FileNotFoundError(
             "wdi-simple.exe not found. Run scripts/fetch_wdi.ps1 or build libwdi."
         )
+    from .paths import data_dir
+    extraction = data_dir() / "drivers" / f"{vid:04x}-{pid:04x}"
+    extraction.mkdir(parents=True, exist_ok=True)
     result = _run([
         str(exe),
         "--vid", f"0x{vid:04X}",
@@ -309,6 +313,7 @@ def install_winusb(vid: int, pid: int, name: str = "Glideleaf Bluetooth") -> Non
         "--type", "0",  # 0 = WinUSB
         "--name", name,
         "--timeout", "120000",
+        "--dest", str(extraction),
     ])
     if result.returncode != 0:
         raise RuntimeError(
@@ -409,12 +414,10 @@ def _relaunch_elevated(args: list[str], wait: bool = True) -> int:
 
 
 def install_winusb_elevated(vid: int, pid: int, name: str = "Glideleaf Bluetooth") -> None:
-    # Check before UAC so a missing optional tool is not hidden behind exit 1.
+    # Prepare before UAC. The elevated child verifies the cached hash again.
     if wdi_simple_path() is None:
-        raise FileNotFoundError(
-            "wdi-simple.exe not found. Automatic driver installation is unavailable. "
-            "Use Zadig (https://zadig.akeo.ie/) to install WinUSB for the selected dongle."
-        )
+        from .driver_tool import ensure_tool
+        ensure_tool()
     if is_admin():
         install_winusb(vid, pid, name)
         return

@@ -228,9 +228,9 @@ class SetupWizard:
         d = self._dongle
         if d is None or self._busy or self._ambiguous():
             return
-        if not messagebox.askyesno(t("동글 드라이버 전환"), t("{name}을 WinUSB로 전환할까요?\n\n복원하기 전까지 이 동글의 일반 Bluetooth 기능을 사용할 수 없습니다.", name=d.label), parent=self.win):
+        if not messagebox.askyesno(t("동글 드라이버 전환"), t("{name}을 WinUSB로 전환할까요?\n\n복원하기 전까지 이 동글의 일반 Bluetooth 기능을 사용할 수 없습니다.", name=d.label) + "\n\n" + t("필요한 설치 도구는 Timocop/libwdi 커뮤니티 릴리스에서 자동 다운로드하고 SHA-256으로 검증합니다."), parent=self.win):
             return
-        self._run_driver(d, lambda: driver.install_winusb_elevated(d.vid, d.pid), t("WinUSB로 전환 중… 관리자 권한 요청을 확인하세요."), t("전환 완료. 동글을 다시 검색합니다…"))
+        self._run_driver(d, lambda: driver.install_winusb_elevated(d.vid, d.pid), t("설치 도구 준비 및 WinUSB 전환 중… 관리자 권한 요청을 확인하세요."), t("전환 완료. 동글을 다시 검색합니다…"))
 
     def _restore(self) -> None:
         d = self._dongle

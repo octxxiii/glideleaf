@@ -15,6 +15,7 @@ hiddenimports = (
 )
 
 datas = [(str(ROOT / "LICENSE"), "."), (str(ROOT / "THIRD_PARTY_NOTICES.md"), ".")]
+datas += [(str(ROOT / "winuc" / "licenses"), "winuc/licenses")]
 notices = ROOT / "build" / "licenses"
 if not (notices / "dependencies.json").is_file():
     raise RuntimeError("Run python scripts/collect_licenses.py before packaging")

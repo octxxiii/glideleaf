@@ -71,9 +71,20 @@ explicitly rather than opening the first available adapter.
 
 *Actual desktop UI with two simulated adapters; not physical-device qualification.*
 
-Automatic WinUSB switching requires the optional `wdi-simple.exe` tool. It is **not included** in this source repository. Prefer a verified build from [libwdi](https://github.com/pbatard/libwdi); `scripts/fetch_wdi.ps1` downloads an unofficial community binary and is an explicit opt-in.
+Confirm **Switch to WinUSB** to prepare the installer automatically, then approve
+the Windows administrator prompt. No separate Zadig download is required.
+If no local installer was supplied, Glideleaf downloads the pinned
+[Timocop/libwdi community build v1.0](https://github.com/Timocop/libwdi-wdi-releases/releases/tag/v1.0),
+checks SHA-256 for both the archive and executable, and caches it under
+`%LOCALAPPDATA%\WinUC\tools`. Cached downloads are checked again before use.
+Download or verification failure stops setup before UAC; retry the same button.
+The automatic download supports x64 and x86 Windows; ARM64 is not qualified.
+See [driver-tool provenance](docs/DRIVER_TOOL.md). The optional developer command
+`scripts/fetch_wdi.ps1` only prepares this same verified tool, without installing a driver.
 
-Alternatively, run `scripts/setup_dongle.ps1` and follow its Zadig instructions. The setup GUI reports an error if the automatic tool is missing; it does not silently install it. Restore the selected adapter through **Adapter setup / restore** before uninstalling. Do not switch an adapter that you rely on for your only keyboard or mouse.
+Manual Zadig setup remains an alternative via `scripts/setup_dongle.ps1`.
+Restore the selected adapter through **Adapter setup / restore** before uninstalling.
+Do not switch an adapter that you rely on for your only keyboard or mouse.
 
 Multiple adapters with the same USB VID/PID are shown separately, but the current
 transport/driver operations cannot safely distinguish them. Keep just the one

@@ -4,6 +4,7 @@ Keep named placeholders and literal newline escapes in every translation.
 """
 _ROWS = r"""
 오른쪽|Right|右|右侧|右側|Derecha|Droite|Rechts|Direita
+필요한 설치 도구는 Timocop/libwdi 커뮤니티 릴리스에서 자동 다운로드하고 SHA-256으로 검증합니다.|The required installer is downloaded automatically from the Timocop/libwdi community release and verified with SHA-256.|必要なツールはTimocop/libwdiのコミュニティリリースから自動取得し、SHA-256で検証します。|所需工具将从 Timocop/libwdi 社区版本自动下载，并通过 SHA-256 校验。|所需工具將從 Timocop/libwdi 社群版本自動下載，並以 SHA-256 驗證。|La herramienta se descarga de la versión comunitaria Timocop/libwdi y se verifica con SHA-256.|L’outil est téléchargé depuis la version communautaire Timocop/libwdi et vérifié par SHA-256.|Das Tool wird aus dem Community-Release Timocop/libwdi heruntergeladen und per SHA-256 geprüft.|A ferramenta é baixada da versão comunitária Timocop/libwdi e verificada com SHA-256.
 왼쪽|Left|左|左侧|左側|Izquierda|Gauche|Links|Esquerda
 위쪽|Top|上|上方|上方|Arriba|En haut|Oben|Acima
 아래쪽|Bottom|下|下方|下方|Abajo|En bas|Unten|Abaixo
@@ -89,7 +90,7 @@ USB 블루투스 동글을 찾지 못했습니다.\n지원 동글을 연결하�
 일반 Bluetooth로 복원|Restore normal Bluetooth|通常のBluetoothに戻す|恢复普通蓝牙|還原一般藍牙|Restaurar Bluetooth normal|Restaurer le Bluetooth standard|Normales Bluetooth wiederherstellen|Restaurar Bluetooth normal
 WinUSB로 전환|Switch to WinUSB|WinUSBに切り替え|切换到 WinUSB|切換至 WinUSB|Cambiar a WinUSB|Passer à WinUSB|Zu WinUSB wechseln|Mudar para WinUSB
 동글 드라이버 전환|Switch adapter driver|アダプタードライバーの切り替え|切换适配器驱动|切換配接器驅動程式|Cambiar controlador|Changer de pilote|Adaptertreiber wechseln|Mudar driver do adaptador
-WinUSB로 전환 중… 관리자 권한 요청을 확인하세요.|Switching to WinUSB… approve the administrator prompt.|WinUSBに切り替え中…管理者権限の確認に応答してください。|正在切换到 WinUSB…请确认管理员权限请求。|正在切換至 WinUSB…請確認系統管理員權限要求。|Cambiando a WinUSB… acepta la solicitud de administrador.|Passage à WinUSB… acceptez la demande administrateur.|Wechsel zu WinUSB… Administratoranfrage bestätigen.|Mudando para WinUSB… confirme a solicitação de administrador.
+설치 도구 준비 및 WinUSB 전환 중… 관리자 권한 요청을 확인하세요.|Preparing installer and switching to WinUSB… approve the administrator prompt.|インストーラーの準備とWinUSBへの切り替え中…管理者権限を承認してください。|正在准备安装工具并切换到 WinUSB…请确认管理员权限请求。|正在準備安裝工具並切換至 WinUSB…請確認系統管理員權限要求。|Preparando el instalador y cambiando a WinUSB… acepta la solicitud de administrador.|Préparation de l’outil et passage à WinUSB… acceptez la demande administrateur.|Installer wird vorbereitet und WinUSB eingerichtet… Administratoranfrage bestätigen.|Preparando o instalador e mudando para WinUSB… confirme a solicitação de administrador.
 전환 완료. 동글을 다시 검색합니다…|Driver switched. Searching again…|切り替え完了。再検索しています…|切换完成，正在重新搜索…|切換完成，正在重新搜尋…|Controlador cambiado. Buscando de nuevo…|Pilote changé. Nouvelle recherche…|Treiber gewechselt. Erneute Suche…|Driver alterado. Buscando novamente…
 기존 Bluetooth 드라이버로 복원 중…|Restoring the standard Bluetooth driver…|標準Bluetoothドライバーに復元中…|正在恢复标准蓝牙驱动…|正在還原標準藍牙驅動程式…|Restaurando el controlador Bluetooth…|Restauration du pilote Bluetooth standard…|Standard-Bluetooth-Treiber wird wiederhergestellt…|Restaurando driver Bluetooth padrão…
 복원을 요청했습니다. 동글을 다시 검색합니다…|Restore requested. Searching again…|復元を要求しました。再検索しています…|已请求恢复，正在重新搜索…|已要求還原，正在重新搜尋…|Restauración solicitada. Buscando de nuevo…|Restauration demandée. Nouvelle recherche…|Wiederherstellung angefordert. Erneute Suche…|Restauração solicitada. Buscando novamente…
